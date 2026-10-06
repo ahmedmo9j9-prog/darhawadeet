@@ -66,32 +66,16 @@ main{flex:1;padding:28px;min-width:0}
 <section class="page active" id="dashboard">
   <div class="topbar"><div><h1>صباح الخير 👋</h1><p>ملخص أعمال دار حواديت اليوم</p></div><div class="actions"><button class="btn" onclick="openImport()">رفع قائمة Excel</button><button class="btn primary" onclick="showPage('pos')">فتح الكاشير</button></div></div>
   <div class="grid4">
-    <div class="card kpi"><small>مبيعات اليوم</small><strong>18,450 ج</strong><span class="trend">+12.4% عن أمس</span></div>
-    <div class="card kpi"><small>عدد الفواتير</small><strong>87</strong><span class="trend">+8 فواتير</span></div>
-    <div class="card kpi"><small>الكتب المباعة</small><strong>214</strong><span class="trend">+18.2%</span></div>
-    <div class="card kpi"><small>قيمة المخزون</small><strong>482,600 ج</strong><span class="trend">1,842 نسخة</span></div>
+    <div class="card kpi"><small>مبيعات اليوم</small><strong>0 ج</strong><span class="trend">+12.4% عن أمس</span></div>
+    <div class="card kpi"><small>عدد الفواتير</small><strong>0</strong><span class="trend">+8 فواتير</span></div>
+    <div class="card kpi"><small>الكتب المباعة</small><strong>0</strong><span class="trend">+18.2%</span></div>
+    <div class="card kpi"><small>قيمة المخزون</small><strong>0 ج</strong><span class="trend">1,842 نسخة</span></div>
   </div>
   <div class="grid2">
-    <div class="card"><div class="section-title"><h3>مبيعات آخر 7 أيام</h3><span class="badge good">جنيه</span></div><div class="barlist">
-      <div class="barrow"><span>الأحد</span><div class="bar"><div class="fill" style="width:72%"></div></div><b>19.2K</b></div>
-      <div class="barrow"><span>الاثنين</span><div class="bar"><div class="fill" style="width:54%"></div></div><b>14.3K</b></div>
-      <div class="barrow"><span>الثلاثاء</span><div class="bar"><div class="fill" style="width:83%"></div></div><b>22.1K</b></div>
-      <div class="barrow"><span>الأربعاء</span><div class="bar"><div class="fill" style="width:66%"></div></div><b>17.6K</b></div>
-      <div class="barrow"><span>الخميس</span><div class="bar"><div class="fill" style="width:91%"></div></div><b>24.4K</b></div>
-    </div></div>
-    <div class="card"><div class="section-title"><h3>الأكثر مبيعًا</h3><span class="badge">هذا الشهر</span></div>
-      <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المبيعات</th></tr></thead><tbody>
-      <tr><td>لورد الغوامض</td><td><b>182</b></td></tr><tr><td>المهندس الأعظم</td><td><b>141</b></td></tr><tr><td>البداية بعد النهاية</td><td><b>119</b></td></tr><tr><td>خادم الظل</td><td><b>93</b></td></tr>
-      </tbody></table></div>
-    </div>
+    <div class="card"><div class="section-title"><h3>مبيعات آخر 7 أيام</h3><span class="badge">جنيه</span></div><div style="padding:38px 10px;text-align:center;color:#999">لا توجد مبيعات مسجلة بعد</div></div>
+    <div class="card"><div class="section-title"><h3>الأكثر مبيعًا</h3><span class="badge">هذا الشهر</span></div><div style="padding:38px 10px;text-align:center;color:#999">لا توجد بيانات مبيعات بعد</div></div>
   </div>
-  <div class="card" style="margin-top:15px"><div class="section-title"><h3>تنبيهات المخزون</h3><button class="btn" onclick="showPage('books')">عرض المخزون</button></div>
-    <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المخزن</th><th>الرصيد</th><th>الحد الأدنى</th><th>الحالة</th></tr></thead><tbody>
-      <tr><td>الجولة الخضراء</td><td>الرئيسي</td><td>7</td><td>15</td><td><span class="badge warn">منخفض</span></td></tr>
-      <tr><td>البئر والبندول</td><td>الرئيسي</td><td>4</td><td>10</td><td><span class="badge bad">حرج</span></td></tr>
-      <tr><td>الرسالة المسروقة</td><td>المعرض</td><td>12</td><td>12</td><td><span class="badge good">مناسب</span></td></tr>
-    </tbody></table></div>
-  </div>
+  <div class="card" style="margin-top:15px"><div class="section-title"><h3>تنبيهات المخزون</h3><button class="btn" onclick="showPage('books')">عرض المخزون</button></div><div style="padding:28px;text-align:center;color:#999">لا توجد كتب في المخزون بعد</div></div>
 </section>
 
 <section class="page" id="pos">
@@ -115,36 +99,23 @@ main{flex:1;padding:28px;min-width:0}
 </section>
 
 <section class="page" id="consign"><div class="topbar"><div><h1>الأمانة والموزعون</h1><p>متابعة الكتب الموجودة لدى المكتبات والموزعين وتسوية الحسابات</p></div><button class="btn primary" onclick="toast('نموذج إضافة جهة أمانة')">+ جهة جديدة</button></div>
-<div class="grid4"><div class="card kpi"><small>جهات نشطة</small><strong>26</strong></div><div class="card kpi"><small>نسخ لدى الغير</small><strong>2,840</strong></div><div class="card kpi"><small>مبيعات غير مسواة</small><strong>74,500 ج</strong></div><div class="card kpi"><small>مرتجعات متوقعة</small><strong>318</strong></div></div>
-<div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>الجهة</th><th>المستلم</th><th>المباع</th><th>المتبقي</th><th>المستحق</th><th>الحالة</th></tr></thead><tbody>
-<tr><td>مكتبة ألف</td><td>520</td><td>310</td><td>210</td><td>38,200 ج</td><td><span class="badge warn">تحتاج تسوية</span></td></tr>
-<tr><td>موزع القاهرة</td><td>850</td><td>730</td><td>120</td><td>51,900 ج</td><td><span class="badge good">منتظم</span></td></tr>
-<tr><td>مكتبة الورّاق</td><td>280</td><td>164</td><td>116</td><td>19,300 ج</td><td><span class="badge good">منتظم</span></td></tr>
-</tbody></table></div></div></section>
+<div class="grid4"><div class="card kpi"><small>جهات نشطة</small><strong>0</strong></div><div class="card kpi"><small>نسخ لدى الغير</small><strong>0</strong></div><div class="card kpi"><small>مبيعات غير مسواة</small><strong>0 ج</strong></div><div class="card kpi"><small>مرتجعات متوقعة</small><strong>0</strong></div></div>
+<div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>الجهة</th><th>المستلم</th><th>المباع</th><th>المتبقي</th><th>المستحق</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
 <section class="page" id="authors"><div class="topbar"><div><h1>حسابات المؤلفين</h1><p>النسب والمبيعات والمستحقات</p></div><button class="btn primary" onclick="toast('إضافة مؤلف')">+ مؤلف</button></div>
-<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>المؤلف</th><th>الكتب</th><th>النسبة</th><th>المبيعات</th><th>المستحق</th><th>المدفوع</th><th>الرصيد</th></tr></thead><tbody>
-<tr><td>أدهم العطار</td><td>4</td><td>10%</td><td>1,240</td><td>24,800 ج</td><td>15,000 ج</td><td><b>9,800 ج</b></td></tr>
-<tr><td>محمد عبدالعزيز</td><td>2</td><td>8%</td><td>830</td><td>11,600 ج</td><td>11,600 ج</td><td><span class="badge good">مسدد</span></td></tr>
-</tbody></table></div></div></section>
+<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>المؤلف</th><th>الكتب</th><th>النسبة</th><th>المبيعات</th><th>المستحق</th><th>المدفوع</th><th>الرصيد</th></tr></thead><tbody></tbody></table></div></div></section>
 
 <section class="page" id="printing"><div class="topbar"><div><h1>المطبعة والطبعات</h1><p>أوامر الطباعة وتكلفة كل طبعة</p></div><button class="btn primary" onclick="toast('تم إنشاء أمر طباعة')">+ أمر طباعة</button></div>
-<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>الطبعة</th><th>الكمية</th><th>المطبعة</th><th>التكلفة</th><th>الحالة</th></tr></thead><tbody>
-<tr><td>لورد الغوامض</td><td>الثالثة</td><td>3,000</td><td>مطبعة الأمل</td><td>78,000 ج</td><td><span class="badge warn">قيد الطباعة</span></td></tr>
-<tr><td>البئر والبندول</td><td>الأولى</td><td>1,500</td><td>مطبعة النيل</td><td>41,500 ج</td><td><span class="badge good">تم الاستلام</span></td></tr>
-</tbody></table></div></div></section>
+<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>الطبعة</th><th>الكمية</th><th>المطبعة</th><th>التكلفة</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
 <section class="page" id="exhibitions"><div class="topbar"><div><h1>المعارض</h1><p>مخزن مستقل وتقارير مبيعات لكل معرض</p></div><button class="btn primary" onclick="toast('تم إنشاء معرض جديد')">+ معرض جديد</button></div>
-<div class="grid4"><div class="card kpi"><small>المعارض الحالية</small><strong>2</strong></div><div class="card kpi"><small>مخزون المعارض</small><strong>1,120</strong></div><div class="card kpi"><small>مبيعات هذا الأسبوع</small><strong>63,800 ج</strong></div><div class="card kpi"><small>نسخ مرتجعة</small><strong>48</strong></div></div>
-<div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>المعرض</th><th>المخزون</th><th>المبيعات</th><th>النسخ المباعة</th><th>الحالة</th></tr></thead><tbody>
-<tr><td>معرض زايد للكتاب</td><td>460</td><td>31,400 ج</td><td>182</td><td><span class="badge good">مفتوح</span></td></tr>
-<tr><td>معرض القاهرة</td><td>660</td><td>32,400 ج</td><td>209</td><td><span class="badge good">مفتوح</span></td></tr>
-</tbody></table></div></div></section>
+<div class="grid4"><div class="card kpi"><small>المعارض الحالية</small><strong>0</strong></div><div class="card kpi"><small>مخزون المعارض</small><strong>0</strong></div><div class="card kpi"><small>مبيعات هذا الأسبوع</small><strong>0 ج</strong></div><div class="card kpi"><small>نسخ مرتجعة</small><strong>0</strong></div></div>
+<div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>المعرض</th><th>المخزون</th><th>المبيعات</th><th>النسخ المباعة</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
 <section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>تقارير تشغيلية ومالية قابلة للتصدير</p></div><button class="btn" onclick="toast('التصدير إلى Excel جاهز في النسخة الكاملة')">تصدير Excel</button></div>
 <div class="grid2"><div class="card"><div class="section-title"><h3>تقارير سريعة</h3></div>
 <div class="toolbar"><button class="btn">المبيعات اليومية</button><button class="btn">الأكثر مبيعًا</button><button class="btn">حركة المخزون</button><button class="btn">الأرباح</button><button class="btn">المؤلفون</button><button class="btn">الأمانة</button></div></div>
-<div class="card"><div class="section-title"><h3>ملخص الأرباح</h3></div><div class="kpi"><small>صافي الربح التقديري</small><strong>126,400 ج</strong><span class="trend">+16.8% هذا الشهر</span></div></div></div></section>
+<div class="card"><div class="section-title"><h3>ملخص الأرباح</h3></div><div class="kpi"><small>صافي الربح التقديري</small><strong>0 ج</strong><span class="trend">+16.8% هذا الشهر</span></div></div></div></section>
 
 </main>
 </div>
@@ -153,15 +124,7 @@ main{flex:1;padding:28px;min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const books=[
- {title:"لورد الغوامض",author:"",isbn:"978000001",price:240,stock:84,store:"الرئيسي"},
- {title:"المهندس الأعظم",author:"",isbn:"978000002",price:220,stock:61,store:"الرئيسي"},
- {title:"البداية بعد النهاية",author:"",isbn:"978000003",price:180,stock:44,store:"المعرض"},
- {title:"خادم الظل",author:"",isbn:"978000004",price:195,stock:32,store:"الرئيسي"},
- {title:"الجولة الخضراء",author:"أرثر ماشين",isbn:"978000005",price:150,stock:7,store:"الرئيسي"},
- {title:"البئر والبندول",author:"إدغار آلان بو",isbn:"978000006",price:120,stock:4,store:"الرئيسي"},
- {title:"الرسالة المسروقة",author:"إدغار آلان بو",isbn:"978000007",price:135,stock:12,store:"المعرض"}
-];
+const books=[];
 let cart=[];
 function money(n){return Number(n).toLocaleString("ar-EG")+" ج"}
 function showPage(id){
