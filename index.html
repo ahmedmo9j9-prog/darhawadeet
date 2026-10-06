@@ -95,7 +95,7 @@ main{flex:1;padding:28px;min-width:0}
 <section class="page" id="books">
   <div class="topbar"><div><h1>الكتب والمخزون</h1><p>إدارة الكتب والأرصدة والمخازن</p></div><div class="actions"><button class="btn" onclick="openImport()">استيراد Excel</button><button class="btn primary" onclick="openBook()">+ إضافة كتاب</button></div></div>
   <div class="card"><div class="toolbar"><input id="bookSearch" placeholder="ابحث..." style="flex:1;padding:11px;border:1px solid var(--line);border-radius:10px" oninput="renderBooks()"><select id="stockFilter" style="padding:11px;border:1px solid var(--line);border-radius:10px" onchange="renderBooks()"><option value="">كل الحالات</option><option value="low">منخفض</option><option value="ok">متوفر</option></select></div>
-  <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المؤلف</th><th>ISBN</th><th>السعر</th><th>الرصيد</th><th>المخزن</th><th>الحالة</th></tr></thead><tbody id="booksRows"></tbody></table></div></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المؤلف</th><th>ISBN</th><th>السعر</th><th>الرصيد</th><th>المخزن</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="booksRows"></tbody></table></div></div>
 </section>
 
 <section class="page" id="consign"><div class="topbar"><div><h1>الأمانة والموزعون</h1><p>متابعة الكتب الموجودة لدى المكتبات والموزعين وتسوية الحسابات</p></div><button class="btn primary" onclick="toast('نموذج إضافة جهة أمانة')">+ جهة جديدة</button></div>
@@ -124,7 +124,8 @@ main{flex:1;padding:28px;min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const books=[];
+const STORAGE_KEY="dar_hawadit_books_v2";
+const books=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
 let cart=[];
 function money(n){return Number(n).toLocaleString("ar-EG")+" ج"}
 function showPage(id){
@@ -147,36 +148,123 @@ function renderCart(){
  document.getElementById("cartCount").textContent=cart.reduce((s,x)=>s+x.qty,0)+" صنف";
 }
 function completeSale(){if(!cart.length){toast("أضف كتابًا أولًا");return}toast("تم حفظ الفاتورة وطباعة الإيصال (تجريبي)");cart=[];renderCart()}
+function saveBooks(){
+ localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+}
 function renderBooks(){
  const q=(document.getElementById("bookSearch")?.value||"").toLowerCase(), f=document.getElementById("stockFilter")?.value||"";
  const list=books.filter(b=>(b.title+b.author+b.isbn).toLowerCase().includes(q)).filter(b=>f==="low"?b.stock<=10:f==="ok"?b.stock>10:true);
- document.getElementById("booksRows").innerHTML=list.map(b=>`<tr><td><b>${b.title}</b></td><td>${b.author||"—"}</td><td>${b.isbn}</td><td>${money(b.price)}</td><td>${b.stock}</td><td>${b.store}</td><td>${b.stock<=4?'<span class="badge bad">حرج</span>':b.stock<=10?'<span class="badge warn">منخفض</span>':'<span class="badge good">متوفر</span>'}</td></tr>`).join("");
+ document.getElementById("booksRows").innerHTML=list.map(b=>{
+   const idx=books.indexOf(b);
+   return `<tr><td><b>${b.title}</b></td><td>${b.author||"—"}</td><td>${b.isbn}</td><td><b>${money(b.price)}</b></td><td><b>${b.stock}</b></td><td>${b.store}</td><td>${b.stock<=4?'<span class="badge bad">حرج</span>':b.stock<=10?'<span class="badge warn">منخفض</span>':'<span class="badge good">متوفر</span>'}</td><td><button class="btn" style="padding:6px 10px" onclick="openEditBook(${idx})">تعديل</button></td></tr>`;
+ }).join("");
 }
 function openBook(){
  document.getElementById("modalTitle").textContent="إضافة كتاب";
  document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid"><div><label>اسم الكتاب</label><input id="bt" placeholder="اسم الكتاب"></div><div><label>المؤلف</label><input id="ba" placeholder="اسم المؤلف"></div><div><label>ISBN</label><input id="bi" placeholder="ISBN"></div><div><label>السعر</label><input id="bp" type="number" placeholder="0"></div><div><label>الرصيد</label><input id="bs" type="number" placeholder="0"></div><div><label>الطبعة</label><input placeholder="الأولى"></div></div><div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveBook()">حفظ الكتاب</button></div></div>`;
  document.getElementById("modal").classList.add("show");
 }
-function saveBook(){const b={title:document.getElementById("bt").value||"كتاب جديد",author:document.getElementById("ba").value,isbn:document.getElementById("bi").value||Date.now().toString(),price:Number(document.getElementById("bp").value||0),stock:Number(document.getElementById("bs").value||0),store:"الرئيسي"};books.unshift(b);closeModal();renderBooks();renderProducts();toast("تمت إضافة الكتاب")}
+function saveBook(){const b={title:document.getElementById("bt").value||"كتاب جديد",author:document.getElementById("ba").value,isbn:document.getElementById("bi").value||Date.now().toString(),price:Number(document.getElementById("bp").value||0),stock:Number(document.getElementById("bs").value||0),store:"الرئيسي"};books.unshift(b);saveBooks();closeModal();renderBooks();renderProducts();toast("تمت إضافة الكتاب")}
 function openImport(){
  document.getElementById("modalTitle").textContent="استيراد قائمة الكتب من Excel";
- document.getElementById("modalBody").innerHTML=`<div class="drop"><b>ارفع ملف Excel</b><p>الأعمدة المدعومة: اسم الكتاب، المؤلف، ISBN، السعر، الرصيد، المخزن</p><input id="excelFile" type="file" accept=".xlsx,.xls,.csv" style="margin-top:12px"></div><div style="margin-top:14px;font-size:12px;color:#888">سيتم قراءة الملف ومعاينة البيانات قبل اعتمادها في النسخة الكاملة.</div>`;
+ document.getElementById("modalBody").innerHTML=`<div class="drop"><b>ارفع ملف Excel</b><p>يدعم النظام الآن: <b>الكتاب</b> أو <b>اسم الكتاب</b>، المؤلف، ISBN، السعر، الرصيد/الكمية، المخزن</p><input id="excelFile" type="file" accept=".xlsx,.xls,.csv" style="margin-top:12px"></div><div style="margin-top:14px;font-size:12px;color:#888">سيتم تنظيف المسافات تلقائيًا والتعرف على أسماء الأعمدة حتى لو كانت مختلفة قليلًا.</div>`;
  document.getElementById("modal").classList.add("show");
  document.getElementById("excelFile").onchange=e=>handleExcel(e.target.files[0]);
+}
+function normalizeExcelKey(value){
+ return String(value ?? "").replace(/\uFEFF/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function getExcelValue(row, aliases){
+ const normalized = {};
+ Object.keys(row).forEach(k => normalized[normalizeExcelKey(k)] = row[k]);
+ for(const alias of aliases){
+  const key = normalizeExcelKey(alias);
+  if(Object.prototype.hasOwnProperty.call(normalized,key) && normalized[key] !== "") return normalized[key];
+ }
+ return "";
+}
+function toNumber(value){
+ const cleaned = String(value ?? "").replace(/[,،]/g, "").trim();
+ const n = Number(cleaned);
+ return Number.isFinite(n) ? n : 0;
 }
 function handleExcel(file){
  if(!file)return;
  const reader=new FileReader();
  reader.onload=e=>{
   try{
-   const wb=XLSX.read(e.target.result,{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]];
-   const rows=XLSX.utils.sheet_to_json(ws,{defval:""});
-   rows.forEach(r=>{books.push({title:r["اسم الكتاب"]||r.title||"بدون اسم",author:r["المؤلف"]||r.author||"",isbn:String(r["ISBN"]||r.isbn||Date.now()),price:Number(r["السعر"]||r.price||0),stock:Number(r["الرصيد"]||r.stock||0),store:r["المخزن"]||r.store||"الرئيسي"})});
-   renderBooks();renderProducts();toast(`تم استيراد ${rows.length} كتاب تجريبيًا`);closeModal();
-  }catch(err){toast("تعذر قراءة الملف")}
+   const workbook=XLSX.read(e.target.result,{type:"array"});
+   const ws=workbook.Sheets[workbook.SheetNames[0]];
+   const rows=XLSX.utils.sheet_to_json(ws,{defval:"", raw:true});
+   if(!rows.length){ toast("ملف Excel فارغ"); return; }
+
+   let imported=0, skipped=0;
+   rows.forEach(r=>{
+    const title=getExcelValue(r,["الكتاب","اسم الكتاب","العنوان","title","book","book title"]);
+    if(!String(title).trim()){ skipped++; return; }
+    const author=getExcelValue(r,["المؤلف","اسم المؤلف","author"]);
+    const isbn=getExcelValue(r,["ISBN","isbn","الترقيم الدولي","الرقم الدولي"]);
+    const price=getExcelValue(r,["السعر","سعر البيع","price","selling price"]);
+    const stock=getExcelValue(r,["الرصيد","الكمية","المخزون","stock","qty","quantity"]);
+    const store=getExcelValue(r,["المخزن","المخزن الحالي","store","warehouse"]) || "الرئيسي";
+    books.push({
+      title:String(title).trim(),
+      author:String(author).trim(),
+      isbn:String(isbn).trim() || ("EXCEL-" + Date.now() + "-" + imported),
+      price:toNumber(price),
+      stock:toNumber(stock),
+      store:String(store).trim()
+    });
+    imported++;
+   });
+
+   saveBooks();
+   renderBooks();renderProducts();
+   closeModal();
+   toast(`تم استيراد ${imported} كتاب${skipped ? ` — تم تخطي ${skipped} صف بدون اسم كتاب` : ""}`);
+  }catch(err){
+   console.error(err);
+   toast("تعذر قراءة ملف Excel");
+  }
  };
  reader.readAsArrayBuffer(file);
 }
+
+function openEditBook(idx){
+ const b=books[idx];
+ if(!b){toast("الكتاب غير موجود");return;}
+ document.getElementById("modalTitle").textContent="تعديل بيانات الكتاب";
+ document.getElementById("modalBody").innerHTML=`<div class="form">
+   <div style="background:#f8f5f0;padding:13px;border-radius:12px;margin-bottom:14px"><b>${b.title}</b><div style="font-size:12px;color:#888;margin-top:4px">ISBN: ${b.isbn}</div></div>
+   <div class="form-grid" style="grid-template-columns:1fr 1fr">
+     <div><label>سعر البيع</label><input id="editPrice" type="number" min="0" step="0.01" value="${Number(b.price)||0}"></div>
+     <div><label>الكمية / الرصيد</label><input id="editStock" type="number" min="0" step="1" value="${Number(b.stock)||0}"></div>
+   </div>
+   <div style="margin-top:18px;display:flex;justify-content:space-between;gap:8px;align-items:center">
+     <button class="btn" onclick="adjustStock(-1)">− نسخة</button>
+     <div style="display:flex;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveEditedBook(${idx})">حفظ التعديل</button></div>
+     <button class="btn" onclick="adjustStock(1)">+ نسخة</button>
+   </div>
+ </div>`;
+ document.getElementById("modal").classList.add("show");
+}
+function adjustStock(delta){
+ const input=document.getElementById("editStock");
+ if(!input)return;
+ input.value=Math.max(0,Number(input.value||0)+delta);
+}
+function saveEditedBook(idx){
+ const price=Math.max(0,Number(document.getElementById("editPrice").value||0));
+ const stock=Math.max(0,Math.floor(Number(document.getElementById("editStock").value||0)));
+ books[idx].price=price;
+ books[idx].stock=stock;
+ saveBooks();
+ closeModal();
+ renderBooks();
+ renderProducts();
+ toast("تم تحديث السعر والكمية");
+}
+
 function closeModal(){document.getElementById("modal").classList.remove("show")}
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";setTimeout(()=>t.style.display="none",2600)}
 renderProducts();renderCart();renderBooks();
