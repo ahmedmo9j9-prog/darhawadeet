@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>دار حواديت — نظام الإدارة</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --ink:#202020; --muted:#6f6f73; --paper:#f7f6f2; --card:#fff;
+  --accent:#e9763a; --accent2:#f4a261; --line:#e8e5df; --good:#2e9b67; --bad:#c94b4b;
+  --shadow:0 10px 30px rgba(38,31,24,.07);
+}
+*{box-sizing:border-box} body{margin:0;font-family:"Segoe UI","Tahoma",Arial,sans-serif;background:var(--paper);color:var(--ink)}
+button,input,select{font:inherit}
+.app{display:flex;min-height:100vh}
+aside{width:250px;background:#fff;border-left:1px solid var(--line);padding:22px 16px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:11px;padding:8px 10px 22px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.brand-mark{width:42px;height:42px;border-radius:13px;background:var(--ink);color:#fff;display:grid;place-items:center;font-weight:800;font-size:19px}
+.brand b{font-size:18px}.brand small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+nav{display:grid;gap:6px}.nav-btn{border:0;background:transparent;color:#5b5b5b;text-align:right;padding:12px 12px;border-radius:12px;cursor:pointer;display:flex;gap:11px;align-items:center}
+.nav-btn:hover,.nav-btn.active{background:#fff2e9;color:var(--ink);font-weight:700}.ico{width:23px;text-align:center}
+.userbox{position:absolute;bottom:18px;right:16px;left:16px;border-top:1px solid var(--line);padding-top:15px;display:flex;gap:10px;align-items:center}
+.avatar{width:38px;height:38px;border-radius:50%;background:#efeae3;display:grid;place-items:center;font-weight:800}
+main{flex:1;padding:28px;min-width:0}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:24px}
+.topbar h1{margin:0;font-size:27px}.topbar p{margin:5px 0 0;color:var(--muted);font-size:13px}
+.actions{display:flex;gap:9px;align-items:center}.btn{border:1px solid var(--line);background:#fff;padding:10px 15px;border-radius:11px;cursor:pointer}.btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}.btn.orange{background:var(--accent);border-color:var(--accent);color:#fff}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}.grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:15px;margin-top:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow);padding:19px}
+.kpi small{color:var(--muted)}.kpi strong{display:block;font-size:27px;margin:9px 0 2px}.trend{font-size:12px;color:var(--good)}
+.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}.section-title h3{margin:0;font-size:16px}
+.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;min-width:680px}.table th,.table td{padding:12px 10px;border-bottom:1px solid var(--line);font-size:13px;text-align:right}.table th{color:var(--muted);font-weight:600}.badge{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;background:#f0eee9}.badge.good{background:#e7f6ef;color:#23754f}.badge.warn{background:#fff0df;color:#a86220}.badge.bad{background:#fde8e8;color:#a43e3e}
+.barlist{display:grid;gap:13px}.barrow{display:grid;grid-template-columns:90px 1fr 60px;gap:10px;align-items:center;font-size:12px}.bar{height:9px;border-radius:20px;background:#eee9e1;overflow:hidden}.fill{height:100%;background:var(--accent);border-radius:20px}
+.page{display:none}.page.active{display:block}
+.search{display:flex;gap:8px;margin-bottom:14px}.search input,.search select,.form input,.form select{width:100%;padding:11px 12px;border:1px solid var(--line);background:#fff;border-radius:10px;outline:none}.search input:focus,.form input:focus,.form select:focus{border-color:#d4a47f}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}
+.two-col{display:grid;grid-template-columns:1.4fr .9fr;gap:15px}
+.pos{display:grid;grid-template-columns:1.3fr .9fr;gap:15px}.product-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.product{border:1px solid var(--line);border-radius:13px;padding:13px;background:#fff;cursor:pointer}.product:hover{border-color:#d9b79e}.product .cover{height:125px;border-radius:10px;background:linear-gradient(135deg,#222,#6f5545);display:grid;place-items:center;color:#fff;font-weight:800;margin-bottom:9px}.product h4{margin:0;font-size:13px}.product small{color:var(--muted)}.price{margin-top:8px;font-weight:800}
+.cart{position:sticky;top:20px}.cart-row{display:grid;grid-template-columns:1fr 55px 75px;gap:8px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px}.qty{border:1px solid var(--line);padding:4px 6px;border-radius:8px;text-align:center}.totals{display:grid;gap:8px;margin-top:14px}.sum{display:flex;justify-content:space-between}.grand{font-size:19px;font-weight:800;padding-top:10px;border-top:1px solid var(--line)}
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.form label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.42);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}.modal.show{display:flex}.modal-box{width:min(760px,100%);background:#fff;border-radius:18px;padding:22px;max-height:90vh;overflow:auto}.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.x{border:0;background:#f4f1ed;width:35px;height:35px;border-radius:50%;cursor:pointer}.drop{border:2px dashed #d9d1c7;padding:30px;text-align:center;border-radius:14px;color:var(--muted)}
+.toast{position:fixed;bottom:22px;left:22px;background:#202020;color:#fff;padding:12px 16px;border-radius:11px;display:none;z-index:80}
+@media(max-width:1050px){aside{width:215px}.grid4{grid-template-columns:repeat(2,1fr)}.pos,.two-col,.grid2{grid-template-columns:1fr}.cart{position:static}}
+@media(max-width:720px){aside{position:fixed;inset:auto 0 0 0;width:100%;height:auto;z-index:40;padding:8px;border-top:1px solid var(--line);border-left:0}.brand, .userbox{display:none}nav{display:flex;justify-content:space-around}.nav-btn{font-size:0;justify-content:center;padding:9px}.nav-btn .ico{font-size:19px}main{padding:18px 14px 78px}.grid4{grid-template-columns:1fr 1fr}.product-grid{grid-template-columns:repeat(2,1fr)}.topbar h1{font-size:22px}.actions .btn:nth-child(2){display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <div class="brand"><div class="brand-mark">ح</div><div><b>دار حواديت</b><small>حواديت متع عقلك</small></div></div>
+  <nav>
+    <button class="nav-btn active" data-page="dashboard"><span class="ico">⌂</span>لوحة التحكم</button>
+    <button class="nav-btn" data-page="pos"><span class="ico">▣</span>الكاشير</button>
+    <button class="nav-btn" data-page="books"><span class="ico">▤</span>الكتب والمخزون</button>
+    <button class="nav-btn" data-page="consign"><span class="ico">⇄</span>الأمانة والموزعون</button>
+    <button class="nav-btn" data-page="authors"><span class="ico">✎</span>المؤلفون</button>
+    <button class="nav-btn" data-page="printing"><span class="ico">▥</span>الطباعة والطبعات</button>
+    <button class="nav-btn" data-page="exhibitions"><span class="ico">⌖</span>المعارض</button>
+    <button class="nav-btn" data-page="reports"><span class="ico">◫</span>التقارير</button>
+  </nav>
+  <div class="userbox"><div class="avatar">أ</div><div><b style="font-size:13px">أحمد</b><div style="font-size:11px;color:#888">مدير النظام</div></div></div>
+</aside>
+
+<main>
+<section class="page active" id="dashboard">
+  <div class="topbar"><div><h1>صباح الخير 👋</h1><p>ملخص أعمال دار حواديت اليوم</p></div><div class="actions"><button class="btn" onclick="openImport()">رفع قائمة Excel</button><button class="btn primary" onclick="showPage('pos')">فتح الكاشير</button></div></div>
+  <div class="grid4">
+    <div class="card kpi"><small>مبيعات اليوم</small><strong>18,450 ج</strong><span class="trend">+12.4% عن أمس</span></div>
+    <div class="card kpi"><small>عدد الفواتير</small><strong>87</strong><span class="trend">+8 فواتير</span></div>
+    <div class="card kpi"><small>الكتب المباعة</small><strong>214</strong><span class="trend">+18.2%</span></div>
+    <div class="card kpi"><small>قيمة المخزون</small><strong>482,600 ج</strong><span class="trend">1,842 نسخة</span></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="section-title"><h3>مبيعات آخر 7 أيام</h3><span class="badge good">جنيه</span></div><div class="barlist">
+      <div class="barrow"><span>الأحد</span><div class="bar"><div class="fill" style="width:72%"></div></div><b>19.2K</b></div>
+      <div class="barrow"><span>الاثنين</span><div class="bar"><div class="fill" style="width:54%"></div></div><b>14.3K</b></div>
+      <div class="barrow"><span>الثلاثاء</span><div class="bar"><div class="fill" style="width:83%"></div></div><b>22.1K</b></div>
+      <div class="barrow"><span>الأربعاء</span><div class="bar"><div class="fill" style="width:66%"></div></div><b>17.6K</b></div>
+      <div class="barrow"><span>الخميس</span><div class="bar"><div class="fill" style="width:91%"></div></div><b>24.4K</b></div>
+    </div></div>
+    <div class="card"><div class="section-title"><h3>الأكثر مبيعًا</h3><span class="badge">هذا الشهر</span></div>
+      <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المبيعات</th></tr></thead><tbody>
+      <tr><td>لورد الغوامض</td><td><b>182</b></td></tr><tr><td>المهندس الأعظم</td><td><b>141</b></td></tr><tr><td>البداية بعد النهاية</td><td><b>119</b></td></tr><tr><td>خادم الظل</td><td><b>93</b></td></tr>
+      </tbody></table></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:15px"><div class="section-title"><h3>تنبيهات المخزون</h3><button class="btn" onclick="showPage('books')">عرض المخزون</button></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المخزن</th><th>الرصيد</th><th>الحد الأدنى</th><th>الحالة</th></tr></thead><tbody>
+      <tr><td>الجولة الخضراء</td><td>الرئيسي</td><td>7</td><td>15</td><td><span class="badge warn">منخفض</span></td></tr>
+      <tr><td>البئر والبندول</td><td>الرئيسي</td><td>4</td><td>10</td><td><span class="badge bad">حرج</span></td></tr>
+      <tr><td>الرسالة المسروقة</td><td>المعرض</td><td>12</td><td>12</td><td><span class="badge good">مناسب</span></td></tr>
+    </tbody></table></div>
+  </div>
+</section>
+
+<section class="page" id="pos">
+  <div class="topbar"><div><h1>الكاشير</h1><p>بيع سريع بالعنوان أو المؤلف أو ISBN / Barcode</p></div><div class="actions"><button class="btn" onclick="toast('تم إغلاق الوردية تجريبيًا')">إغلاق الوردية</button><button class="btn orange" onclick="completeSale()">حفظ وطباعة الفاتورة</button></div></div>
+  <div class="pos">
+    <div class="card">
+      <div class="search"><input id="posSearch" placeholder="ابحث باسم الكتاب أو المؤلف أو ISBN..." oninput="renderProducts()"/><select><option>كل المخازن</option><option>الرئيسي</option><option>المعارض</option></select></div>
+      <div class="product-grid" id="products"></div>
+    </div>
+    <div class="card cart"><div class="section-title"><h3>الفاتورة الحالية</h3><span class="badge" id="cartCount">0 صنف</span></div><div id="cart"></div>
+      <div class="totals"><div class="sum"><span>الإجمالي</span><b id="subtotal">0 ج</b></div><div class="sum"><span>الخصم</span><input id="discount" type="number" min="0" value="0" style="width:90px;padding:6px;border:1px solid var(--line);border-radius:8px" oninput="renderCart()"></div><div class="sum grand"><span>المستحق</span><b id="grand">0 ج</b></div></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px"><button class="btn">نقدي</button><button class="btn">فيزا</button><button class="btn">آجل</button></div>
+    </div>
+  </div>
+</section>
+
+<section class="page" id="books">
+  <div class="topbar"><div><h1>الكتب والمخزون</h1><p>إدارة الكتب والأرصدة والمخازن</p></div><div class="actions"><button class="btn" onclick="openImport()">استيراد Excel</button><button class="btn primary" onclick="openBook()">+ إضافة كتاب</button></div></div>
+  <div class="card"><div class="toolbar"><input id="bookSearch" placeholder="ابحث..." style="flex:1;padding:11px;border:1px solid var(--line);border-radius:10px" oninput="renderBooks()"><select id="stockFilter" style="padding:11px;border:1px solid var(--line);border-radius:10px" onchange="renderBooks()"><option value="">كل الحالات</option><option value="low">منخفض</option><option value="ok">متوفر</option></select></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المؤلف</th><th>ISBN</th><th>السعر</th><th>الرصيد</th><th>المخزن</th><th>الحالة</th></tr></thead><tbody id="booksRows"></tbody></table></div></div>
+</section>
+
+<section class="page" id="consign"><div class="topbar"><div><h1>الأمانة والموزعون</h1><p>متابعة الكتب الموجودة لدى المكتبات والموزعين وتسوية الحسابات</p></div><button class="btn primary" onclick="toast('نموذج إضافة جهة أمانة')">+ جهة جديدة</button></div>
+<div class="grid4"><div class="card kpi"><small>جهات نشطة</small><strong>26</strong></div><div class="card kpi"><small>نسخ لدى الغير</small><strong>2,840</strong></div><div class="card kpi"><small>مبيعات غير مسواة</small><strong>74,500 ج</strong></div><div class="card kpi"><small>مرتجعات متوقعة</small><strong>318</strong></div></div>
+<div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>الجهة</th><th>المستلم</th><th>المباع</th><th>المتبقي</th><th>المستحق</th><th>الحالة</th></tr></thead><tbody>
+<tr><td>مكتبة ألف</td><td>520</td><td>310</td><td>210</td><td>38,200 ج</td><td><span class="badge warn">تحتاج تسوية</span></td></tr>
+<tr><td>موزع القاهرة</td><td>850</td><td>730</td><td>120</td><td>51,900 ج</td><td><span class="badge good">منتظم</span></td></tr>
+<tr><td>مكتبة الورّاق</td><td>280</td><td>164</td><td>116</td><td>19,300 ج</td><td><span class="badge good">منتظم</span></td></tr>
+</tbody></table></div></div></section>
+
+<section class="page" id="authors"><div class="topbar"><div><h1>حسابات المؤلفين</h1><p>النسب والمبيعات والمستحقات</p></div><button class="btn primary" onclick="toast('إضافة مؤلف')">+ مؤلف</button></div>
+<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>المؤلف</th><th>الكتب</th><th>النسبة</th><th>المبيعات</th><th>المستحق</th><th>المدفوع</th><th>الرصيد</th></tr></thead><tbody>
+<tr><td>أدهم العطار</td><td>4</td><td>10%</td><td>1,240</td><td>24,800 ج</td><td>15,000 ج</td><td><b>9,800 ج</b></td></tr>
+<tr><td>محمد عبدالعزيز</td><td>2</td><td>8%</td><td>830</td><td>11,600 ج</td><td>11,600 ج</td><td><span class="badge good">مسدد</span></td></tr>
+</tbody></table></div></div></section>
+
+<section class="page" id="printing"><div class="topbar"><div><h1>المطبعة والطبعات</h1><p>أوامر الطباعة وتكلفة كل طبعة</p></div><button class="btn primary" onclick="toast('تم إنشاء أمر طباعة')">+ أمر طباعة</button></div>
+<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>الطبعة</th><th>الكمية</th><th>المطبعة</th><th>التكلفة</th><th>الحالة</th></tr></thead><tbody>
+<tr><td>لورد الغوامض</td><td>الثالثة</td><td>3,000</td><td>مطبعة الأمل</td><td>78,000 ج</td><td><span class="badge warn">قيد الطباعة</span></td></tr>
+<tr><td>البئر والبندول</td><td>الأولى</td><td>1,500</td><td>مطبعة النيل</td><td>41,500 ج</td><td><span class="badge good">تم الاستلام</span></td></tr>
+</tbody></table></div></div></section>
+
+<section class="page" id="exhibitions"><div class="topbar"><div><h1>المعارض</h1><p>مخزن مستقل وتقارير مبيعات لكل معرض</p></div><button class="btn primary" onclick="toast('تم إنشاء معرض جديد')">+ معرض جديد</button></div>
+<div class="grid4"><div class="card kpi"><small>المعارض الحالية</small><strong>2</strong></div><div class="card kpi"><small>مخزون المعارض</small><strong>1,120</strong></div><div class="card kpi"><small>مبيعات هذا الأسبوع</small><strong>63,800 ج</strong></div><div class="card kpi"><small>نسخ مرتجعة</small><strong>48</strong></div></div>
+<div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>المعرض</th><th>المخزون</th><th>المبيعات</th><th>النسخ المباعة</th><th>الحالة</th></tr></thead><tbody>
+<tr><td>معرض زايد للكتاب</td><td>460</td><td>31,400 ج</td><td>182</td><td><span class="badge good">مفتوح</span></td></tr>
+<tr><td>معرض القاهرة</td><td>660</td><td>32,400 ج</td><td>209</td><td><span class="badge good">مفتوح</span></td></tr>
+</tbody></table></div></div></section>
+
+<section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>تقارير تشغيلية ومالية قابلة للتصدير</p></div><button class="btn" onclick="toast('التصدير إلى Excel جاهز في النسخة الكاملة')">تصدير Excel</button></div>
+<div class="grid2"><div class="card"><div class="section-title"><h3>تقارير سريعة</h3></div>
+<div class="toolbar"><button class="btn">المبيعات اليومية</button><button class="btn">الأكثر مبيعًا</button><button class="btn">حركة المخزون</button><button class="btn">الأرباح</button><button class="btn">المؤلفون</button><button class="btn">الأمانة</button></div></div>
+<div class="card"><div class="section-title"><h3>ملخص الأرباح</h3></div><div class="kpi"><small>صافي الربح التقديري</small><strong>126,400 ج</strong><span class="trend">+16.8% هذا الشهر</span></div></div></div></section>
+
+</main>
+</div>
+
+<div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h3 id="modalTitle">إضافة كتاب</h3><button class="x" onclick="closeModal()">×</button></div><div id="modalBody"></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const books=[
+ {title:"لورد الغوامض",author:"",isbn:"978000001",price:240,stock:84,store:"الرئيسي"},
+ {title:"المهندس الأعظم",author:"",isbn:"978000002",price:220,stock:61,store:"الرئيسي"},
+ {title:"البداية بعد النهاية",author:"",isbn:"978000003",price:180,stock:44,store:"المعرض"},
+ {title:"خادم الظل",author:"",isbn:"978000004",price:195,stock:32,store:"الرئيسي"},
+ {title:"الجولة الخضراء",author:"أرثر ماشين",isbn:"978000005",price:150,stock:7,store:"الرئيسي"},
+ {title:"البئر والبندول",author:"إدغار آلان بو",isbn:"978000006",price:120,stock:4,store:"الرئيسي"},
+ {title:"الرسالة المسروقة",author:"إدغار آلان بو",isbn:"978000007",price:135,stock:12,store:"المعرض"}
+];
+let cart=[];
+function money(n){return Number(n).toLocaleString("ar-EG")+" ج"}
+function showPage(id){
+ document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+ document.getElementById(id).classList.add("active");
+ document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+ window.scrollTo({top:0,behavior:"smooth"});
+}
+document.querySelectorAll(".nav-btn").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
+function renderProducts(){
+ const q=(document.getElementById("posSearch")?.value||"").trim().toLowerCase();
+ const list=books.filter(b=>(b.title+b.author+b.isbn).toLowerCase().includes(q));
+ document.getElementById("products").innerHTML=list.map((b,i)=>`<div class="product" onclick="addCart(${books.indexOf(b)})"><div class="cover">${b.title.slice(0,18)}</div><h4>${b.title}</h4><small>${b.author||"مؤلف"}</small><div class="price">${money(b.price)}</div></div>`).join("");
+}
+function addCart(i){const b=books[i];const x=cart.find(c=>c.isbn===b.isbn); if(x)x.qty++; else cart.push({...b,qty:1}); renderCart();toast("تمت إضافة الكتاب للفاتورة")}
+function renderCart(){
+ document.getElementById("cart").innerHTML=cart.length?cart.map((x,i)=>`<div class="cart-row"><span>${x.title}<br><small>${money(x.price)}</small></span><span class="qty">${x.qty}</span><button class="btn" style="padding:5px" onclick="cart.splice(${i},1);renderCart()">حذف</button></div>`).join(""):"<div style='color:#999;padding:24px 0;text-align:center'>الفاتورة فارغة</div>";
+ const subtotal=cart.reduce((s,x)=>s+x.price*x.qty,0), discount=Number(document.getElementById("discount")?.value||0);
+ document.getElementById("subtotal").textContent=money(subtotal);document.getElementById("grand").textContent=money(Math.max(0,subtotal-discount));
+ document.getElementById("cartCount").textContent=cart.reduce((s,x)=>s+x.qty,0)+" صنف";
+}
+function completeSale(){if(!cart.length){toast("أضف كتابًا أولًا");return}toast("تم حفظ الفاتورة وطباعة الإيصال (تجريبي)");cart=[];renderCart()}
+function renderBooks(){
+ const q=(document.getElementById("bookSearch")?.value||"").toLowerCase(), f=document.getElementById("stockFilter")?.value||"";
+ const list=books.filter(b=>(b.title+b.author+b.isbn).toLowerCase().includes(q)).filter(b=>f==="low"?b.stock<=10:f==="ok"?b.stock>10:true);
+ document.getElementById("booksRows").innerHTML=list.map(b=>`<tr><td><b>${b.title}</b></td><td>${b.author||"—"}</td><td>${b.isbn}</td><td>${money(b.price)}</td><td>${b.stock}</td><td>${b.store}</td><td>${b.stock<=4?'<span class="badge bad">حرج</span>':b.stock<=10?'<span class="badge warn">منخفض</span>':'<span class="badge good">متوفر</span>'}</td></tr>`).join("");
+}
+function openBook(){
+ document.getElementById("modalTitle").textContent="إضافة كتاب";
+ document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid"><div><label>اسم الكتاب</label><input id="bt" placeholder="اسم الكتاب"></div><div><label>المؤلف</label><input id="ba" placeholder="اسم المؤلف"></div><div><label>ISBN</label><input id="bi" placeholder="ISBN"></div><div><label>السعر</label><input id="bp" type="number" placeholder="0"></div><div><label>الرصيد</label><input id="bs" type="number" placeholder="0"></div><div><label>الطبعة</label><input placeholder="الأولى"></div></div><div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveBook()">حفظ الكتاب</button></div></div>`;
+ document.getElementById("modal").classList.add("show");
+}
+function saveBook(){const b={title:document.getElementById("bt").value||"كتاب جديد",author:document.getElementById("ba").value,isbn:document.getElementById("bi").value||Date.now().toString(),price:Number(document.getElementById("bp").value||0),stock:Number(document.getElementById("bs").value||0),store:"الرئيسي"};books.unshift(b);closeModal();renderBooks();renderProducts();toast("تمت إضافة الكتاب")}
+function openImport(){
+ document.getElementById("modalTitle").textContent="استيراد قائمة الكتب من Excel";
+ document.getElementById("modalBody").innerHTML=`<div class="drop"><b>ارفع ملف Excel</b><p>الأعمدة المدعومة: اسم الكتاب، المؤلف، ISBN، السعر، الرصيد، المخزن</p><input id="excelFile" type="file" accept=".xlsx,.xls,.csv" style="margin-top:12px"></div><div style="margin-top:14px;font-size:12px;color:#888">سيتم قراءة الملف ومعاينة البيانات قبل اعتمادها في النسخة الكاملة.</div>`;
+ document.getElementById("modal").classList.add("show");
+ document.getElementById("excelFile").onchange=e=>handleExcel(e.target.files[0]);
+}
+function handleExcel(file){
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=e=>{
+  try{
+   const wb=XLSX.read(e.target.result,{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]];
+   const rows=XLSX.utils.sheet_to_json(ws,{defval:""});
+   rows.forEach(r=>{books.push({title:r["اسم الكتاب"]||r.title||"بدون اسم",author:r["المؤلف"]||r.author||"",isbn:String(r["ISBN"]||r.isbn||Date.now()),price:Number(r["السعر"]||r.price||0),stock:Number(r["الرصيد"]||r.stock||0),store:r["المخزن"]||r.store||"الرئيسي"})});
+   renderBooks();renderProducts();toast(`تم استيراد ${rows.length} كتاب تجريبيًا`);closeModal();
+  }catch(err){toast("تعذر قراءة الملف")}
+ };
+ reader.readAsArrayBuffer(file);
+}
+function closeModal(){document.getElementById("modal").classList.remove("show")}
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";setTimeout(()=>t.style.display="none",2600)}
+renderProducts();renderCart();renderBooks();
+</script>
+</body></html>
