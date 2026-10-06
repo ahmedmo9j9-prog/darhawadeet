@@ -141,10 +141,13 @@ main{flex:1;padding:28px;min-width:0}
   <div class="card"><div class="section-title"><h3>المستخدمون</h3><span class="badge">صلاحيات حسب الدور</span></div><div id="usersList"></div></div>
 </section>
 
-<section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>تقارير تشغيلية ومالية قابلة للتصدير</p></div><button class="btn" onclick="exportBooksToExcel()">تصدير Excel</button></div>
-<div class="grid2"><div class="card"><div class="section-title"><h3>تقارير سريعة</h3></div>
-<div class="toolbar"><button class="btn">المبيعات اليومية</button><button class="btn">الأكثر مبيعًا</button><button class="btn">حركة المخزون</button><button class="btn">الأرباح</button><button class="btn">المؤلفون</button><button class="btn">الأمانة</button></div></div>
-<div class="card"><div class="section-title"><h3>ملخص الأرباح</h3></div><div class="kpi"><small>صافي الربح التقديري</small><strong>0 ج</strong><span class="trend">+16.8% هذا الشهر</span></div></div></div></section>
+<section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>التقارير مرتبطة فعليًا بالفواتير والمبيعات المسجلة</p></div><button class="btn" onclick="exportSalesToExcel()">تصدير مبيعات Excel</button></div>
+<div class="grid4" id="reportKpis"></div>
+<div class="grid2">
+  <div class="card"><div class="section-title"><h3>أكثر الكتب مبيعًا</h3><span class="badge" id="reportPeriod">كل الفترات</span></div><div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>النسخ</th><th>المبيعات</th></tr></thead><tbody id="topBooksRows"></tbody></table></div></div>
+  <div class="card"><div class="section-title"><h3>المبيعات حسب طريقة الدفع</h3></div><div class="table-wrap"><table class="table"><thead><tr><th>الطريقة</th><th>الفواتير</th><th>القيمة</th></tr></thead><tbody id="paymentRows"></tbody></table></div></div>
+</div>
+<div class="card" style="margin-top:15px"><div class="section-title"><h3>آخر الفواتير</h3><button class="btn" onclick="clearSalesData()">تصفير سجل المبيعات</button></div><div class="table-wrap"><table class="table"><thead><tr><th>رقم الفاتورة</th><th>التاريخ</th><th>عدد النسخ</th><th>الخصم</th><th>الإجمالي</th><th>الدفع</th></tr></thead><tbody id="salesRows"></tbody></table></div></div></section>
 
 </main>
 </div>
@@ -154,7 +157,7 @@ main{flex:1;padding:28px;min-width:0}
 
 <script>
 const STORAGE_KEY="dar_hawadit_books_v2";
-let books=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
+let books=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]").map(normalizeBook);
 let cart=[];
 let currentUser=null;
 const USERS_KEY='dar_hawadit_users_v1';
@@ -200,12 +203,13 @@ function enterApp(u){
   document.querySelectorAll('.nav-btn').forEach(b=>{ const page=b.dataset.page; const allowed=ROLE_PAGES[u.role]||[]; b.style.display=allowed.includes(page)?'flex':'none'; });
   if(!ROLE_PAGES[u.role].includes(document.querySelector('.page.active')?.id||'dashboard')) showPage('dashboard');
   renderUsers();
+  renderReports();
 }
 function logout(){sessionStorage.removeItem('dar_hawadit_session'); location.reload();}
 function guard(action){
   if(!currentUser){return false;}
   if(currentUser.role==='admin') return true;
-  const map={import:['admin','storekeeper'],editBook:['admin','storekeeper'],addBook:['admin','storekeeper'],sale:['admin','cashier'],users:['admin']};
+  const map={import:['admin','storekeeper'],editBook:['admin','storekeeper'],addBook:['admin','storekeeper'],sale:['admin','cashier'],users:['admin'],salesClear:['admin']};
   const allowed=map[action]||[];
   if(!allowed.includes(currentUser.role)){toast('ليس لديك صلاحية لتنفيذ هذه العملية');return false;}
   return true;
@@ -214,6 +218,7 @@ function guard(action){
 let paymentMethod='نقدي';
 function money(n){return Number(n).toLocaleString("ar-EG")+" ج"}
 function showPage(id){
+ if(id==='reports') renderReports();
  if(currentUser && !(ROLE_PAGES[currentUser.role]||[]).includes(id)){toast('ليس لديك صلاحية لفتح هذه الصفحة');return;}
  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
  document.getElementById(id).classList.add("active");
@@ -250,28 +255,85 @@ function completeSale(){ if(!guard('sale')) return;
  }
  saveBooks();
  const invoices=JSON.parse(localStorage.getItem('dar_hawadit_invoices')||'[]');
- invoices.push({id:Date.now(),date:new Date().toISOString(),items:cart.map(x=>({title:x.title,isbn:x.isbn,qty:x.qty,price:x.price})),subtotal,discount,total,payment:paymentMethod});
+ invoices.push({id:Date.now(),date:new Date().toISOString(),cashier:currentUser?.username||'',items:cart.map(x=>({title:x.title,isbn:x.isbn,qty:x.qty,price:x.price})),subtotal,discount,total,payment:paymentMethod});
  localStorage.setItem('dar_hawadit_invoices',JSON.stringify(invoices));
- cart=[];document.getElementById('discount').value=0;renderCart();renderBooks();renderProducts();
+ cart=[];document.getElementById('discount').value=0;renderCart();renderBooks();renderProducts();renderReports();
  toast('تم حفظ الفاتورة رقم '+invoices[invoices.length-1].id+' — '+money(total)+' — '+paymentMethod);
 }
+function normalizeBook(b){
+  return {
+    id:b.id||('B-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),
+    title:String(b.title||b.name||''),
+    author:String(b.author||''),
+    isbn:String(b.isbn||''),
+    barcode:String(b.barcode||b.ean||''),
+    price:Number(b.price)||0,
+    cost:Number(b.cost)||0,
+    edition:String(b.edition||''),
+    pages:Number(b.pages)||0,
+    cover:String(b.cover||''),
+    publisher:String(b.publisher||'دار حواديت'),
+    category:String(b.category||''),
+    minStock:Number(b.minStock)||0,
+    stock:Number(b.stock)||0,
+    store:String(b.store||'الرئيسي'),
+    notes:String(b.notes||'')
+  };
+}
+function getInvoices(){return JSON.parse(localStorage.getItem('dar_hawadit_invoices')||'[]');}
+function saveInvoices(rows){localStorage.setItem('dar_hawadit_invoices',JSON.stringify(rows));}
+function renderReports(){
+  const invoices=getInvoices();
+  const total=invoices.reduce((s,x)=>s+(Number(x.total)||0),0);
+  const copies=invoices.reduce((s,x)=>s+(x.items||[]).reduce((a,i)=>a+(Number(i.qty)||0),0),0);
+  const avg=invoices.length?total/invoices.length:0;
+  const k=document.getElementById('reportKpis');
+  if(k) k.innerHTML=`<div class="card kpi"><small>إجمالي المبيعات</small><strong>${money(total)}</strong><span class="trend">${invoices.length} فاتورة</span></div><div class="card kpi"><small>الكتب المباعة</small><strong>${copies.toLocaleString('ar-EG')}</strong><span class="trend">نسخة</span></div><div class="card kpi"><small>متوسط الفاتورة</small><strong>${money(avg)}</strong><span class="trend">للفواتير المسجلة</span></div><div class="card kpi"><small>أعلى فاتورة</small><strong>${money(invoices.reduce((m,x)=>Math.max(m,Number(x.total)||0),0))}</strong><span class="trend">أفضل عملية بيع</span></div>`;
+  const byBook={}; invoices.forEach(inv=>(inv.items||[]).forEach(i=>{const key=i.isbn||i.title; if(!byBook[key]) byBook[key]={title:i.title||'—',qty:0,sales:0}; byBook[key].qty+=Number(i.qty)||0; byBook[key].sales+=(Number(i.qty)||0)*(Number(i.price)||0);}));
+  const top=Object.values(byBook).sort((a,b)=>b.qty-a.qty).slice(0,10);
+  const topRows=document.getElementById('topBooksRows'); if(topRows) topRows.innerHTML=top.length?top.map(x=>`<tr><td><b>${escapeHtml(x.title)}</b></td><td>${x.qty}</td><td>${money(x.sales)}</td></tr>`).join(''):`<tr><td colspan="3" style="text-align:center;color:#999">لا توجد مبيعات مسجلة</td></tr>`;
+  const payments={نقدي:{c:0,v:0},فيزا:{c:0,v:0},آجل:{c:0,v:0}}; invoices.forEach(x=>{const p=payments[x.payment]||payments['نقدي'];p.c++;p.v+=Number(x.total)||0;});
+  const pr=document.getElementById('paymentRows'); if(pr) pr.innerHTML=Object.entries(payments).map(([name,x])=>`<tr><td>${name}</td><td>${x.c}</td><td>${money(x.v)}</td></tr>`).join('');
+  const sr=document.getElementById('salesRows'); if(sr) sr.innerHTML=invoices.slice().reverse().slice(0,30).map(x=>{const cc=(x.items||[]).reduce((a,i)=>a+(Number(i.qty)||0),0);const d=new Date(x.date);return `<tr><td>${x.id}</td><td>${d.toLocaleString('ar-EG')}</td><td>${cc}</td><td>${money(x.discount||0)}</td><td><b>${money(x.total)}</b></td><td><span class="badge">${x.payment||'نقدي'}</span></td></tr>`}).join('')||`<tr><td colspan="6" style="text-align:center;color:#999">لا توجد فواتير مسجلة</td></tr>`;
+}
+function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function exportSalesToExcel(){
+  if(typeof XLSX==='undefined'){toast('مكتبة Excel غير متاحة');return;}
+  const invoices=getInvoices();
+  const rows=invoices.flatMap(inv=>(inv.items||[]).map(i=>({
+    'رقم الفاتورة':inv.id,'التاريخ':new Date(inv.date).toLocaleString('ar-EG'),'الكتاب':i.title,'ISBN':i.isbn,'الكمية':i.qty,'سعر الوحدة':i.price,'الإجمالي قبل الخصم':inv.subtotal,'الخصم':inv.discount,'إجمالي الفاتورة':inv.total,'طريقة الدفع':inv.payment
+  })));
+  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,'المبيعات');XLSX.writeFile(wb,'مبيعات_دار_حواديت.xlsx');toast('تم تصدير تقرير المبيعات');
+}
+function clearSalesData(){
+  if(!guard('salesClear'))return;
+  if(!confirm('سيتم حذف سجل الفواتير والمبيعات بالكامل من هذا المتصفح. هل أنت متأكد؟'))return;
+  localStorage.removeItem('dar_hawadit_invoices'); renderReports(); toast('تم تصفير سجل المبيعات');
+}
 function saveBooks(){
+ books=books.map(normalizeBook);
  localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
 }
 function renderBooks(){
  const q=(document.getElementById("bookSearch")?.value||"").toLowerCase(), f=document.getElementById("stockFilter")?.value||"";
- const list=books.filter(b=>(b.title+b.author+b.isbn).toLowerCase().includes(q)).filter(b=>f==="low"?b.stock<=10:f==="ok"?b.stock>10:true);
+ const list=books.filter(b=>(b.title+b.author+b.isbn+b.barcode+b.category).toLowerCase().includes(q)).filter(b=>{const min=Number(b.minStock)||0;return f==="low"?(Number(b.stock)||0)<=min:f==="ok"?(Number(b.stock)||0)>min:true;});
  document.getElementById("booksRows").innerHTML=list.map(b=>{
-   const idx=books.indexOf(b);
-   return `<tr><td><b>${b.title}</b></td><td>${b.author||"—"}</td><td>${b.isbn}</td><td><b>${money(b.price)}</b></td><td><b>${b.stock}</b></td><td>${b.store}</td><td>${b.stock<=4?'<span class="badge bad">حرج</span>':b.stock<=10?'<span class="badge warn">منخفض</span>':'<span class="badge good">متوفر</span>'}</td><td><button class="btn" style="padding:6px 10px" onclick="openEditBook(${idx})">تعديل</button></td></tr>`;
+   const idx=books.indexOf(b), min=Number(b.minStock)||0; const stock=Number(b.stock)||0;
+   return `<tr><td><b>${escapeHtml(b.title)}</b><br><small style="color:#888">${escapeHtml(b.edition||'')} ${b.category?`• ${escapeHtml(b.category)}`:''}</small></td><td>${escapeHtml(b.author)||"—"}</td><td>${escapeHtml(b.isbn)||"—"}</td><td><b>${money(b.price)}</b></td><td><b>${stock}</b></td><td>${escapeHtml(b.store||'الرئيسي')}</td><td>${stock<=Math.max(4,min)?'<span class="badge bad">منخفض</span>':'<span class="badge good">متوفر</span>'}</td><td><button class="btn" style="padding:6px 10px" onclick="openEditBook(${idx})">تعديل كل البيانات</button></td></tr>`;
  }).join("");
 }
 function openBook(){ if(!guard('addBook')) return;
  document.getElementById("modalTitle").textContent="إضافة كتاب";
- document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid"><div><label>اسم الكتاب</label><input id="bt" placeholder="اسم الكتاب"></div><div><label>المؤلف</label><input id="ba" placeholder="اسم المؤلف"></div><div><label>ISBN</label><input id="bi" placeholder="ISBN"></div><div><label>السعر</label><input id="bp" type="number" placeholder="0"></div><div><label>الرصيد</label><input id="bs" type="number" placeholder="0"></div><div><label>الطبعة</label><input placeholder="الأولى"></div></div><div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveBook()">حفظ الكتاب</button></div></div>`;
+ document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid">
+ <div><label>اسم الكتاب</label><input id="bt" placeholder="اسم الكتاب"></div><div><label>المؤلف</label><input id="ba" placeholder="اسم المؤلف"></div><div><label>ISBN</label><input id="bi" placeholder="ISBN"></div>
+ <div><label>Barcode</label><input id="bb" placeholder="Barcode"></div><div><label>سعر البيع</label><input id="bp" type="number" min="0"></div><div><label>سعر التكلفة</label><input id="bc" type="number" min="0"></div>
+ <div><label>الطبعة</label><input id="bed" placeholder="الأولى"></div><div><label>عدد الصفحات</label><input id="bpages" type="number" min="0"></div><div><label>دار النشر</label><input id="bpub" value="دار حواديت"></div>
+ <div><label>التصنيف</label><input id="bcat" placeholder="رواية / تاريخ / علم نفس..."></div><div><label>الحد الأدنى للمخزون</label><input id="bmin" type="number" min="0"></div><div><label>المخزن</label><input id="bstore" value="الرئيسي"></div>
+ <div style="grid-column:1/-1"><label>صورة الغلاف (رابط)</label><input id="bcover" placeholder="رابط صورة الغلاف"></div><div style="grid-column:1/-1"><label>ملاحظات</label><input id="bnotes" placeholder="ملاحظات عن الكتاب"></div>
+ <div><label>الرصيد</label><input id="bs" type="number" min="0"></div></div>
+ <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveBook()">حفظ الكتاب</button></div></div>`;
  document.getElementById("modal").classList.add("show");
 }
-function saveBook(){const b={title:document.getElementById("bt").value||"كتاب جديد",author:document.getElementById("ba").value,isbn:document.getElementById("bi").value||Date.now().toString(),price:Number(document.getElementById("bp").value||0),stock:Number(document.getElementById("bs").value||0),store:"الرئيسي"};books.unshift(b);saveBooks();closeModal();renderBooks();renderProducts();toast("تمت إضافة الكتاب")}
 function openImport(){ if(!guard('import')) return;
  document.getElementById("modalTitle").textContent="استيراد قائمة الكتب من Excel";
  document.getElementById("modalBody").innerHTML=`<div class="drop"><b>ارفع ملف Excel</b><p>يدعم النظام الآن: <b>الكتاب</b> أو <b>اسم الكتاب</b>، المؤلف، ISBN، السعر، الرصيد/الكمية، المخزن</p><input id="excelFile" type="file" accept=".xlsx,.xls,.csv" style="margin-top:12px"></div><div style="margin-top:14px;font-size:12px;color:#888">سيتم تنظيف المسافات تلقائيًا والتعرف على أسماء الأعمدة حتى لو كانت مختلفة قليلًا.</div>`;
@@ -340,38 +402,27 @@ function handleExcel(file){
 function openEditBook(idx){ if(!guard('editBook')) return;
  const b=books[idx];
  if(!b){toast("الكتاب غير موجود");return;}
- document.getElementById("modalTitle").textContent="تعديل بيانات الكتاب";
- document.getElementById("modalBody").innerHTML=`<div class="form">
-   <div style="background:#f8f5f0;padding:13px;border-radius:12px;margin-bottom:14px"><b>${b.title}</b><div style="font-size:12px;color:#888;margin-top:4px">ISBN: ${b.isbn}</div></div>
-   <div class="form-grid" style="grid-template-columns:1fr 1fr">
-     <div><label>سعر البيع</label><input id="editPrice" type="number" min="0" step="0.01" value="${Number(b.price)||0}"></div>
-     <div><label>الكمية / الرصيد</label><input id="editStock" type="number" min="0" step="1" value="${Number(b.stock)||0}"></div>
-   </div>
-   <div style="margin-top:18px;display:flex;justify-content:space-between;gap:8px;align-items:center">
-     <button class="btn" onclick="adjustStock(-1)">− نسخة</button>
-     <div style="display:flex;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveEditedBook(${idx})">حفظ التعديل</button></div>
-     <button class="btn" onclick="adjustStock(1)">+ نسخة</button>
-   </div>
- </div>`;
+ document.getElementById("modalTitle").textContent="تعديل كل بيانات الكتاب";
+ document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid">
+ <div><label>اسم الكتاب</label><input id="editTitle" value="${escapeHtml(b.title)}"></div><div><label>المؤلف</label><input id="editAuthor" value="${escapeHtml(b.author)}"></div><div><label>ISBN</label><input id="editIsbn" value="${escapeHtml(b.isbn)}"></div>
+ <div><label>Barcode</label><input id="editBarcode" value="${escapeHtml(b.barcode)}"></div><div><label>سعر البيع</label><input id="editPrice" type="number" min="0" step="0.01" value="${Number(b.price)||0}"></div><div><label>سعر التكلفة</label><input id="editCost" type="number" min="0" step="0.01" value="${Number(b.cost)||0}"></div>
+ <div><label>الطبعة</label><input id="editEdition" value="${escapeHtml(b.edition)}"></div><div><label>عدد الصفحات</label><input id="editPages" type="number" min="0" value="${Number(b.pages)||0}"></div><div><label>دار النشر</label><input id="editPublisher" value="${escapeHtml(b.publisher||'دار حواديت')}"></div>
+ <div><label>التصنيف</label><input id="editCategory" value="${escapeHtml(b.category)}"></div><div><label>الحد الأدنى للمخزون</label><input id="editMinStock" type="number" min="0" value="${Number(b.minStock)||0}"></div><div><label>المخزن</label><input id="editStore" value="${escapeHtml(b.store||'الرئيسي')}"></div>
+ <div><label>الكمية / الرصيد</label><input id="editStock" type="number" min="0" step="1" value="${Number(b.stock)||0}"></div><div style="grid-column:2/-1"><label>رابط صورة الغلاف</label><input id="editCover" value="${escapeHtml(b.cover)}"></div><div style="grid-column:1/-1"><label>ملاحظات</label><input id="editNotes" value="${escapeHtml(b.notes)}"></div>
+ </div>
+ <div style="margin-top:12px;color:#888;font-size:12px">الربح التقريبي للنسخة: <b>${money((Number(b.price)||0)-(Number(b.cost)||0))}</b></div>
+ <div style="margin-top:18px;display:flex;justify-content:space-between;gap:8px;align-items:center"><button class="btn" onclick="adjustStock(-1)">− نسخة</button><div style="display:flex;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveEditedBook(${idx})">حفظ كل التعديلات</button></div><button class="btn" onclick="adjustStock(1)">+ نسخة</button></div></div>`;
  document.getElementById("modal").classList.add("show");
 }
-function adjustStock(delta){
- const input=document.getElementById("editStock");
- if(!input)return;
- input.value=Math.max(0,Number(input.value||0)+delta);
-}
+function adjustStock(delta){const input=document.getElementById("editStock");if(!input)return;input.value=Math.max(0,Number(input.value||0)+delta);}
 function saveEditedBook(idx){
- const price=Math.max(0,Number(document.getElementById("editPrice").value||0));
- const stock=Math.max(0,Math.floor(Number(document.getElementById("editStock").value||0)));
- books[idx].price=price;
- books[idx].stock=stock;
- saveBooks();
- closeModal();
- renderBooks();
- renderProducts();
- toast("تم تحديث السعر والكمية");
+ const old=books[idx];
+ books[idx]=normalizeBook({
+   id:old.id,title:document.getElementById('editTitle').value.trim(),author:document.getElementById('editAuthor').value.trim(),isbn:document.getElementById('editIsbn').value.trim(),barcode:document.getElementById('editBarcode').value.trim(),
+   price:Number(document.getElementById('editPrice').value||0),cost:Number(document.getElementById('editCost').value||0),edition:document.getElementById('editEdition').value.trim(),pages:Number(document.getElementById('editPages').value||0),publisher:document.getElementById('editPublisher').value.trim(),category:document.getElementById('editCategory').value.trim(),minStock:Number(document.getElementById('editMinStock').value||0),stock:Number(document.getElementById('editStock').value||0),store:document.getElementById('editStore').value.trim(),cover:document.getElementById('editCover').value.trim(),notes:document.getElementById('editNotes').value.trim()
+ });
+ saveBooks();closeModal();renderBooks();renderProducts();renderReports();toast('تم حفظ كل بيانات الكتاب');
 }
-
 
 function openUserModal(){
  if(!guard('users')) return;
