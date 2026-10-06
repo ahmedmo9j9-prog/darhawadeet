@@ -79,7 +79,7 @@ main{flex:1;padding:28px;min-width:0}
 </section>
 
 <section class="page" id="pos">
-  <div class="topbar"><div><h1>الكاشير</h1><p>بيع سريع بالعنوان أو المؤلف أو ISBN / Barcode</p></div><div class="actions"><button class="btn" onclick="toast('تم إغلاق الوردية تجريبيًا')">إغلاق الوردية</button><button class="btn orange" onclick="completeSale()">حفظ وطباعة الفاتورة</button></div></div>
+  <div class="topbar"><div><h1>الكاشير</h1><p>بيع سريع بالعنوان أو المؤلف أو ISBN / Barcode</p></div><div class="actions"><button class="btn" onclick="closeShift()">إغلاق الوردية</button><button class="btn orange" onclick="completeSale()">حفظ وطباعة الفاتورة</button></div></div>
   <div class="pos">
     <div class="card">
       <div class="search"><input id="posSearch" placeholder="ابحث باسم الكتاب أو المؤلف أو ISBN..." oninput="renderProducts()"/><select><option>كل المخازن</option><option>الرئيسي</option><option>المعارض</option></select></div>
@@ -98,21 +98,21 @@ main{flex:1;padding:28px;min-width:0}
   <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المؤلف</th><th>ISBN</th><th>السعر</th><th>الرصيد</th><th>المخزن</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="booksRows"></tbody></table></div></div>
 </section>
 
-<section class="page" id="consign"><div class="topbar"><div><h1>الأمانة والموزعون</h1><p>متابعة الكتب الموجودة لدى المكتبات والموزعين وتسوية الحسابات</p></div><button class="btn primary" onclick="toast('نموذج إضافة جهة أمانة')">+ جهة جديدة</button></div>
+<section class="page" id="consign"><div class="topbar"><div><h1>الأمانة والموزعون</h1><p>متابعة الكتب الموجودة لدى المكتبات والموزعين وتسوية الحسابات</p></div><button class="btn primary" onclick="openSimpleForm('إضافة جهة أمانة', ['اسم المكتبة / الموزع','رقم الهاتف','ملاحظات'])">+ جهة جديدة</button></div>
 <div class="grid4"><div class="card kpi"><small>جهات نشطة</small><strong>0</strong></div><div class="card kpi"><small>نسخ لدى الغير</small><strong>0</strong></div><div class="card kpi"><small>مبيعات غير مسواة</small><strong>0 ج</strong></div><div class="card kpi"><small>مرتجعات متوقعة</small><strong>0</strong></div></div>
 <div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>الجهة</th><th>المستلم</th><th>المباع</th><th>المتبقي</th><th>المستحق</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="authors"><div class="topbar"><div><h1>حسابات المؤلفين</h1><p>النسب والمبيعات والمستحقات</p></div><button class="btn primary" onclick="toast('إضافة مؤلف')">+ مؤلف</button></div>
+<section class="page" id="authors"><div class="topbar"><div><h1>حسابات المؤلفين</h1><p>النسب والمبيعات والمستحقات</p></div><button class="btn primary" onclick="openSimpleForm('إضافة مؤلف', ['اسم المؤلف','نسبة المؤلف','بيانات التواصل'])">+ مؤلف</button></div>
 <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>المؤلف</th><th>الكتب</th><th>النسبة</th><th>المبيعات</th><th>المستحق</th><th>المدفوع</th><th>الرصيد</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="printing"><div class="topbar"><div><h1>المطبعة والطبعات</h1><p>أوامر الطباعة وتكلفة كل طبعة</p></div><button class="btn primary" onclick="toast('تم إنشاء أمر طباعة')">+ أمر طباعة</button></div>
+<section class="page" id="printing"><div class="topbar"><div><h1>المطبعة والطبعات</h1><p>أوامر الطباعة وتكلفة كل طبعة</p></div><button class="btn primary" onclick="openSimpleForm('أمر طباعة', ['اسم الكتاب','الطبعة','الكمية','المطبعة','التكلفة'])">+ أمر طباعة</button></div>
 <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>الطبعة</th><th>الكمية</th><th>المطبعة</th><th>التكلفة</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="exhibitions"><div class="topbar"><div><h1>المعارض</h1><p>مخزن مستقل وتقارير مبيعات لكل معرض</p></div><button class="btn primary" onclick="toast('تم إنشاء معرض جديد')">+ معرض جديد</button></div>
+<section class="page" id="exhibitions"><div class="topbar"><div><h1>المعارض</h1><p>مخزن مستقل وتقارير مبيعات لكل معرض</p></div><button class="btn primary" onclick="openSimpleForm('إنشاء معرض', ['اسم المعرض','تاريخ البدء','تاريخ الانتهاء'])">+ معرض جديد</button></div>
 <div class="grid4"><div class="card kpi"><small>المعارض الحالية</small><strong>0</strong></div><div class="card kpi"><small>مخزون المعارض</small><strong>0</strong></div><div class="card kpi"><small>مبيعات هذا الأسبوع</small><strong>0 ج</strong></div><div class="card kpi"><small>نسخ مرتجعة</small><strong>0</strong></div></div>
 <div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>المعرض</th><th>المخزون</th><th>المبيعات</th><th>النسخ المباعة</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>تقارير تشغيلية ومالية قابلة للتصدير</p></div><button class="btn" onclick="toast('التصدير إلى Excel جاهز في النسخة الكاملة')">تصدير Excel</button></div>
+<section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>تقارير تشغيلية ومالية قابلة للتصدير</p></div><button class="btn" onclick="exportBooksToExcel()">تصدير Excel</button></div>
 <div class="grid2"><div class="card"><div class="section-title"><h3>تقارير سريعة</h3></div>
 <div class="toolbar"><button class="btn">المبيعات اليومية</button><button class="btn">الأكثر مبيعًا</button><button class="btn">حركة المخزون</button><button class="btn">الأرباح</button><button class="btn">المؤلفون</button><button class="btn">الأمانة</button></div></div>
 <div class="card"><div class="section-title"><h3>ملخص الأرباح</h3></div><div class="kpi"><small>صافي الربح التقديري</small><strong>0 ج</strong><span class="trend">+16.8% هذا الشهر</span></div></div></div></section>
@@ -125,8 +125,9 @@ main{flex:1;padding:28px;min-width:0}
 
 <script>
 const STORAGE_KEY="dar_hawadit_books_v2";
-const books=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
+let books=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");
 let cart=[];
+let paymentMethod='نقدي';
 function money(n){return Number(n).toLocaleString("ar-EG")+" ج"}
 function showPage(id){
  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
@@ -147,7 +148,28 @@ function renderCart(){
  document.getElementById("subtotal").textContent=money(subtotal);document.getElementById("grand").textContent=money(Math.max(0,subtotal-discount));
  document.getElementById("cartCount").textContent=cart.reduce((s,x)=>s+x.qty,0)+" صنف";
 }
-function completeSale(){if(!cart.length){toast("أضف كتابًا أولًا");return}toast("تم حفظ الفاتورة وطباعة الإيصال (تجريبي)");cart=[];renderCart()}
+function selectPayment(btn){
+ paymentMethod=btn.dataset.method||'نقدي';
+ document.querySelectorAll('.payment-btn').forEach(b=>b.style.background='');
+ btn.style.background='#fff2e9';
+ const el=document.getElementById('paymentMethod'); if(el) el.textContent='طريقة الدفع: '+paymentMethod;
+}
+function completeSale(){
+ if(!cart.length){toast('أضف كتابًا أولًا');return;}
+ const subtotal=cart.reduce((s,x)=>s+x.price*x.qty,0);
+ const discount=Number(document.getElementById('discount')?.value||0);
+ const total=Math.max(0,subtotal-discount);
+ for(const item of cart){
+   const b=books.find(x=>x.isbn===item.isbn);
+   if(b) b.stock=Math.max(0,(Number(b.stock)||0)-item.qty);
+ }
+ saveBooks();
+ const invoices=JSON.parse(localStorage.getItem('dar_hawadit_invoices')||'[]');
+ invoices.push({id:Date.now(),date:new Date().toISOString(),items:cart.map(x=>({title:x.title,isbn:x.isbn,qty:x.qty,price:x.price})),subtotal,discount,total,payment:paymentMethod});
+ localStorage.setItem('dar_hawadit_invoices',JSON.stringify(invoices));
+ cart=[];document.getElementById('discount').value=0;renderCart();renderBooks();renderProducts();
+ toast('تم حفظ الفاتورة رقم '+invoices[invoices.length-1].id+' — '+money(total)+' — '+paymentMethod);
+}
 function saveBooks(){
  localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
 }
