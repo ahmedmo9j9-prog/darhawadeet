@@ -43,33 +43,10 @@ main{flex:1;padding:28px;min-width:0}
 .toast{position:fixed;bottom:22px;left:22px;background:#202020;color:#fff;padding:12px 16px;border-radius:11px;display:none;z-index:80}
 @media(max-width:1050px){aside{width:215px}.grid4{grid-template-columns:repeat(2,1fr)}.pos,.two-col,.grid2{grid-template-columns:1fr}.cart{position:static}}
 @media(max-width:720px){aside{position:fixed;inset:auto 0 0 0;width:100%;height:auto;z-index:40;padding:8px;border-top:1px solid var(--line);border-left:0}.brand, .userbox{display:none}nav{display:flex;justify-content:space-around}.nav-btn{font-size:0;justify-content:center;padding:9px}.nav-btn .ico{font-size:19px}main{padding:18px 14px 78px}.grid4{grid-template-columns:1fr 1fr}.product-grid{grid-template-columns:repeat(2,1fr)}.topbar h1{font-size:22px}.actions .btn:nth-child(2){display:none}}
-
-.auth-screen{position:fixed;inset:0;z-index:200;background:linear-gradient(135deg,#f7f2ec,#fff);display:flex;align-items:center;justify-content:center;padding:20px}
-.auth-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,.10);padding:30px}
-.auth-logo{width:56px;height:56px;border-radius:16px;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:25px;font-weight:900;margin:0 auto 14px}
-.auth-card h2{text-align:center;margin:0}.auth-card p{text-align:center;color:var(--muted);font-size:13px;margin:7px 0 22px}
-.auth-form{display:grid;gap:12px}.auth-form label{font-size:12px;color:var(--muted)}.auth-form input,.auth-form select{width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;margin-top:5px}
-.auth-error{background:#fde8e8;color:#a43e3e;padding:10px;border-radius:10px;font-size:12px;display:none}.auth-hint{font-size:11px;color:#999;text-align:center;margin-top:14px}
-.role-card{border:1px solid var(--line);border-radius:13px;padding:13px;display:flex;justify-content:space-between;align-items:center;gap:10px}.role-card+.role-card{margin-top:8px}
-.logout-btn{border:0;background:#fff0e8;color:#9b4d26;border-radius:9px;padding:7px 10px;cursor:pointer;font-size:11px}
 </style>
 </head>
 <body>
-<div class="auth-screen" id="authScreen">
-  <div class="auth-card">
-    <div class="auth-logo">ح</div>
-    <h2>دار حواديت</h2>
-    <p>تسجيل الدخول إلى نظام الإدارة</p>
-    <div class="auth-error" id="authError">اسم المستخدم أو كلمة المرور غير صحيحة</div>
-    <form class="auth-form" onsubmit="login(event)">
-      <div><label>اسم المستخدم</label><input id="loginUser" autocomplete="username" placeholder="أدخل اسم المستخدم" required></div>
-      <div><label>كلمة المرور</label><input id="loginPass" type="password" autocomplete="current-password" placeholder="أدخل كلمة المرور" required></div>
-      <button class="btn primary" type="submit" style="padding:12px">دخول</button>
-    </form>
-    <div class="auth-hint">لأول دخول: المستخدم <b>admin</b> وكلمة المرور <b>admin123</b> ثم غيّرها من إدارة المستخدمين.</div>
-  </div>
-</div>
-<div class="app" id="appShell">
+<div class="app">
 <aside>
   <div class="brand"><div class="brand-mark">ح</div><div><b>دار حواديت</b><small>حواديت متع عقلك</small></div></div>
   <nav>
@@ -81,9 +58,8 @@ main{flex:1;padding:28px;min-width:0}
     <button class="nav-btn" data-page="printing"><span class="ico">▥</span>الطباعة والطبعات</button>
     <button class="nav-btn" data-page="exhibitions"><span class="ico">⌖</span>المعارض</button>
     <button class="nav-btn" data-page="reports"><span class="ico">◫</span>التقارير</button>
-    <button class="nav-btn" data-page="users" data-admin-only="1"><span class="ico">♙</span>المستخدمون</button>
   </nav>
-  <div class="userbox"><div class="avatar" id="userAvatar">أ</div><div style="flex:1"><b style="font-size:13px" id="sideUser">—</b><div style="font-size:11px;color:#888" id="sideRole">—</div></div><button class="logout-btn" onclick="logout()">خروج</button></div>
+  <div class="userbox"><div class="avatar">أ</div><div><b style="font-size:13px">أحمد</b><div style="font-size:11px;color:#888">مدير النظام</div></div></div>
 </aside>
 
 <main>
@@ -103,7 +79,7 @@ main{flex:1;padding:28px;min-width:0}
 </section>
 
 <section class="page" id="pos">
-  <div class="topbar"><div><h1>الكاشير</h1><p>بيع سريع بالعنوان أو المؤلف أو ISBN / Barcode</p></div><div class="actions"><button class="btn" onclick="closeShift()">إغلاق الوردية</button><button class="btn orange" onclick="completeSale()">حفظ وطباعة الفاتورة</button></div></div>
+  <div class="topbar"><div><h1>الكاشير</h1><p>بيع سريع بالعنوان أو المؤلف أو ISBN / Barcode</p></div><div class="actions"><button class="btn" onclick="toast('تم إغلاق الوردية تجريبيًا')">إغلاق الوردية</button><button class="btn orange" onclick="completeSale()">حفظ وطباعة الفاتورة</button></div></div>
   <div class="pos">
     <div class="card">
       <div class="search"><input id="posSearch" placeholder="ابحث باسم الكتاب أو المؤلف أو ISBN..." oninput="renderProducts()"/><select><option>كل المخازن</option><option>الرئيسي</option><option>المعارض</option></select></div>
@@ -111,7 +87,7 @@ main{flex:1;padding:28px;min-width:0}
     </div>
     <div class="card cart"><div class="section-title"><h3>الفاتورة الحالية</h3><span class="badge" id="cartCount">0 صنف</span></div><div id="cart"></div>
       <div class="totals"><div class="sum"><span>الإجمالي</span><b id="subtotal">0 ج</b></div><div class="sum"><span>الخصم</span><input id="discount" type="number" min="0" value="0" style="width:90px;padding:6px;border:1px solid var(--line);border-radius:8px" oninput="renderCart()"></div><div class="sum grand"><span>المستحق</span><b id="grand">0 ج</b></div></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px"><button class="btn payment-btn" data-method="نقدي" onclick="selectPayment(this)">نقدي</button><button class="btn payment-btn" data-method="فيزا" onclick="selectPayment(this)">فيزا</button><button class="btn payment-btn" data-method="آجل" onclick="selectPayment(this)">آجل</button></div><div id="paymentMethod" style="font-size:12px;color:#777;margin-top:9px">طريقة الدفع: نقدي</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:13px"><button class="btn">نقدي</button><button class="btn">فيزا</button><button class="btn">آجل</button></div>
     </div>
   </div>
 </section>
@@ -119,35 +95,27 @@ main{flex:1;padding:28px;min-width:0}
 <section class="page" id="books">
   <div class="topbar"><div><h1>الكتب والمخزون</h1><p>إدارة الكتب والأرصدة والمخازن</p></div><div class="actions"><button class="btn" onclick="openImport()">استيراد Excel</button><button class="btn primary" onclick="openBook()">+ إضافة كتاب</button></div></div>
   <div class="card"><div class="toolbar"><input id="bookSearch" placeholder="ابحث..." style="flex:1;padding:11px;border:1px solid var(--line);border-radius:10px" oninput="renderBooks()"><select id="stockFilter" style="padding:11px;border:1px solid var(--line);border-radius:10px" onchange="renderBooks()"><option value="">كل الحالات</option><option value="low">منخفض</option><option value="ok">متوفر</option></select></div>
-  <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المؤلف</th><th>ISBN</th><th>السعر</th><th>الرصيد</th><th>المخزن</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody id="booksRows"></tbody></table></div></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>المؤلف</th><th>ISBN</th><th>السعر</th><th>الرصيد</th><th>المخزن</th><th>الحالة</th></tr></thead><tbody id="booksRows"></tbody></table></div></div>
 </section>
 
-<section class="page" id="consign"><div class="topbar"><div><h1>الأمانة والموزعون</h1><p>متابعة الكتب الموجودة لدى المكتبات والموزعين وتسوية الحسابات</p></div><button class="btn primary" onclick="openSimpleForm('إضافة جهة أمانة', ['اسم المكتبة / الموزع','رقم الهاتف','ملاحظات'])">+ جهة جديدة</button></div>
+<section class="page" id="consign"><div class="topbar"><div><h1>الأمانة والموزعون</h1><p>متابعة الكتب الموجودة لدى المكتبات والموزعين وتسوية الحسابات</p></div><button class="btn primary" onclick="toast('نموذج إضافة جهة أمانة')">+ جهة جديدة</button></div>
 <div class="grid4"><div class="card kpi"><small>جهات نشطة</small><strong>0</strong></div><div class="card kpi"><small>نسخ لدى الغير</small><strong>0</strong></div><div class="card kpi"><small>مبيعات غير مسواة</small><strong>0 ج</strong></div><div class="card kpi"><small>مرتجعات متوقعة</small><strong>0</strong></div></div>
 <div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>الجهة</th><th>المستلم</th><th>المباع</th><th>المتبقي</th><th>المستحق</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="authors"><div class="topbar"><div><h1>حسابات المؤلفين</h1><p>النسب والمبيعات والمستحقات</p></div><button class="btn primary" onclick="openSimpleForm('إضافة مؤلف', ['اسم المؤلف','نسبة المؤلف','بيانات التواصل'])">+ مؤلف</button></div>
+<section class="page" id="authors"><div class="topbar"><div><h1>حسابات المؤلفين</h1><p>النسب والمبيعات والمستحقات</p></div><button class="btn primary" onclick="toast('إضافة مؤلف')">+ مؤلف</button></div>
 <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>المؤلف</th><th>الكتب</th><th>النسبة</th><th>المبيعات</th><th>المستحق</th><th>المدفوع</th><th>الرصيد</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="printing"><div class="topbar"><div><h1>المطبعة والطبعات</h1><p>أوامر الطباعة وتكلفة كل طبعة</p></div><button class="btn primary" onclick="openSimpleForm('أمر طباعة', ['اسم الكتاب','الطبعة','الكمية','المطبعة','التكلفة'])">+ أمر طباعة</button></div>
+<section class="page" id="printing"><div class="topbar"><div><h1>المطبعة والطبعات</h1><p>أوامر الطباعة وتكلفة كل طبعة</p></div><button class="btn primary" onclick="toast('تم إنشاء أمر طباعة')">+ أمر طباعة</button></div>
 <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>الطبعة</th><th>الكمية</th><th>المطبعة</th><th>التكلفة</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="exhibitions"><div class="topbar"><div><h1>المعارض</h1><p>مخزن مستقل وتقارير مبيعات لكل معرض</p></div><button class="btn primary" onclick="openSimpleForm('إنشاء معرض', ['اسم المعرض','تاريخ البدء','تاريخ الانتهاء'])">+ معرض جديد</button></div>
+<section class="page" id="exhibitions"><div class="topbar"><div><h1>المعارض</h1><p>مخزن مستقل وتقارير مبيعات لكل معرض</p></div><button class="btn primary" onclick="toast('تم إنشاء معرض جديد')">+ معرض جديد</button></div>
 <div class="grid4"><div class="card kpi"><small>المعارض الحالية</small><strong>0</strong></div><div class="card kpi"><small>مخزون المعارض</small><strong>0</strong></div><div class="card kpi"><small>مبيعات هذا الأسبوع</small><strong>0 ج</strong></div><div class="card kpi"><small>نسخ مرتجعة</small><strong>0</strong></div></div>
 <div class="card" style="margin-top:15px"><div class="table-wrap"><table class="table"><thead><tr><th>المعرض</th><th>المخزون</th><th>المبيعات</th><th>النسخ المباعة</th><th>الحالة</th></tr></thead><tbody></tbody></table></div></div></section>
 
-<section class="page" id="users">
-  <div class="topbar"><div><h1>إدارة المستخدمين</h1><p>إنشاء مستخدمين متعددين وتحديد صلاحياتهم</p></div><button class="btn primary" onclick="openUserModal()">+ مستخدم جديد</button></div>
-  <div class="card"><div class="section-title"><h3>المستخدمون</h3><span class="badge">صلاحيات حسب الدور</span></div><div id="usersList"></div></div>
-</section>
-
-<section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>التقارير مرتبطة فعليًا بالفواتير والمبيعات المسجلة</p></div><button class="btn" onclick="exportSalesToExcel()">تصدير مبيعات Excel</button></div>
-<div class="grid4" id="reportKpis"></div>
-<div class="grid2">
-  <div class="card"><div class="section-title"><h3>أكثر الكتب مبيعًا</h3><span class="badge" id="reportPeriod">كل الفترات</span></div><div class="table-wrap"><table class="table"><thead><tr><th>الكتاب</th><th>النسخ</th><th>المبيعات</th></tr></thead><tbody id="topBooksRows"></tbody></table></div></div>
-  <div class="card"><div class="section-title"><h3>المبيعات حسب طريقة الدفع</h3></div><div class="table-wrap"><table class="table"><thead><tr><th>الطريقة</th><th>الفواتير</th><th>القيمة</th></tr></thead><tbody id="paymentRows"></tbody></table></div></div>
-</div>
-<div class="card" style="margin-top:15px"><div class="section-title"><h3>آخر الفواتير</h3><button class="btn" onclick="clearSalesData()">تصفير سجل المبيعات</button></div><div class="table-wrap"><table class="table"><thead><tr><th>رقم الفاتورة</th><th>التاريخ</th><th>عدد النسخ</th><th>الخصم</th><th>الإجمالي</th><th>الدفع</th></tr></thead><tbody id="salesRows"></tbody></table></div></div></section>
+<section class="page" id="reports"><div class="topbar"><div><h1>التقارير</h1><p>تقارير تشغيلية ومالية قابلة للتصدير</p></div><button class="btn" onclick="toast('التصدير إلى Excel جاهز في النسخة الكاملة')">تصدير Excel</button></div>
+<div class="grid2"><div class="card"><div class="section-title"><h3>تقارير سريعة</h3></div>
+<div class="toolbar"><button class="btn">المبيعات اليومية</button><button class="btn">الأكثر مبيعًا</button><button class="btn">حركة المخزون</button><button class="btn">الأرباح</button><button class="btn">المؤلفون</button><button class="btn">الأمانة</button></div></div>
+<div class="card"><div class="section-title"><h3>ملخص الأرباح</h3></div><div class="kpi"><small>صافي الربح التقديري</small><strong>0 ج</strong><span class="trend">+16.8% هذا الشهر</span></div></div></div></section>
 
 </main>
 </div>
@@ -156,70 +124,10 @@ main{flex:1;padding:28px;min-width:0}
 <div class="toast" id="toast"></div>
 
 <script>
-const STORAGE_KEY="dar_hawadit_books_v2";
-let books=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]").map(normalizeBook);
+const books=[];
 let cart=[];
-let currentUser=null;
-const USERS_KEY='dar_hawadit_users_v1';
-const ROLE_LABELS={admin:'مدير النظام',cashier:'كاشير',storekeeper:'أمين مخزن',accountant:'محاسب'};
-const ROLE_PAGES={
-  admin:['dashboard','pos','books','consign','authors','printing','exhibitions','reports','users'],
-  cashier:['dashboard','pos'],
-  storekeeper:['dashboard','books','printing','exhibitions'],
-  accountant:['dashboard','consign','authors','reports']
-};
-const DEFAULT_ADMIN={username:'admin',passwordHash:'240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',name:'مدير النظام',role:'admin',active:true};
-function loadUsers(){
-  let users=JSON.parse(localStorage.getItem(USERS_KEY)||'null');
-  if(!Array.isArray(users)||!users.length){ users=[DEFAULT_ADMIN]; localStorage.setItem(USERS_KEY,JSON.stringify(users)); }
-  return users;
-}
-function saveUsers(users){localStorage.setItem(USERS_KEY,JSON.stringify(users));}
-function hashPassword(str){let hash=0x811c9dc5; for(let i=0;i<str.length;i++){hash^=str.charCodeAt(i); hash=Math.imul(hash,16777619);} return ('00000000'+(hash>>>0).toString(16)).slice(-8);}
-function realHash(str){
-  // FNV-like local hash for compatibility in the static browser app.
-  return hashPassword(str);
-}
-// Map the shipped admin password to a local hash; new passwords use the same local hash mechanism.
-function passwordMatches(stored,input){ return stored===realHash(input) || (stored===DEFAULT_ADMIN.passwordHash && input==='admin123'); }
-function initAuth(){
-  document.getElementById('appShell').style.visibility='hidden';
-  document.getElementById('authScreen').style.display='flex';
-  const saved=sessionStorage.getItem('dar_hawadit_session');
-  if(saved){ const u=loadUsers().find(x=>x.username===saved && x.active!==false); if(u){enterApp(u);} }
-}
-function login(e){
-  e.preventDefault();
-  const username=document.getElementById('loginUser').value.trim(); const pass=document.getElementById('loginPass').value;
-  const u=loadUsers().find(x=>x.username===username);
-  const err=document.getElementById('authError');
-  if(u && u.active!==false && passwordMatches(u.passwordHash,pass)){
-    sessionStorage.setItem('dar_hawadit_session',u.username); enterApp(u); err.style.display='none';
-  }else{err.style.display='block';}
-}
-function enterApp(u){
-  currentUser=u; document.getElementById('authScreen').style.display='none'; document.getElementById('appShell').style.visibility='visible';
-  document.getElementById('sideUser').textContent=u.name||u.username; document.getElementById('sideRole').textContent=ROLE_LABELS[u.role]||u.role; document.getElementById('userAvatar').textContent=(u.name||u.username).slice(0,1);
-  document.querySelectorAll('.nav-btn').forEach(b=>{ const page=b.dataset.page; const allowed=ROLE_PAGES[u.role]||[]; b.style.display=allowed.includes(page)?'flex':'none'; });
-  if(!ROLE_PAGES[u.role].includes(document.querySelector('.page.active')?.id||'dashboard')) showPage('dashboard');
-  renderUsers();
-  renderReports();
-}
-function logout(){sessionStorage.removeItem('dar_hawadit_session'); location.reload();}
-function guard(action){
-  if(!currentUser){return false;}
-  if(currentUser.role==='admin') return true;
-  const map={import:['admin','storekeeper'],editBook:['admin','storekeeper'],addBook:['admin','storekeeper'],sale:['admin','cashier'],users:['admin'],salesClear:['admin']};
-  const allowed=map[action]||[];
-  if(!allowed.includes(currentUser.role)){toast('ليس لديك صلاحية لتنفيذ هذه العملية');return false;}
-  return true;
-}
-
-let paymentMethod='نقدي';
 function money(n){return Number(n).toLocaleString("ar-EG")+" ج"}
 function showPage(id){
- if(id==='reports') renderReports();
- if(currentUser && !(ROLE_PAGES[currentUser.role]||[]).includes(id)){toast('ليس لديك صلاحية لفتح هذه الصفحة');return;}
  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
  document.getElementById(id).classList.add("active");
  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
@@ -238,214 +146,39 @@ function renderCart(){
  document.getElementById("subtotal").textContent=money(subtotal);document.getElementById("grand").textContent=money(Math.max(0,subtotal-discount));
  document.getElementById("cartCount").textContent=cart.reduce((s,x)=>s+x.qty,0)+" صنف";
 }
-function selectPayment(btn){
- paymentMethod=btn.dataset.method||'نقدي';
- document.querySelectorAll('.payment-btn').forEach(b=>b.style.background='');
- btn.style.background='#fff2e9';
- const el=document.getElementById('paymentMethod'); if(el) el.textContent='طريقة الدفع: '+paymentMethod;
-}
-function completeSale(){ if(!guard('sale')) return;
- if(!cart.length){toast('أضف كتابًا أولًا');return;}
- const subtotal=cart.reduce((s,x)=>s+x.price*x.qty,0);
- const discount=Number(document.getElementById('discount')?.value||0);
- const total=Math.max(0,subtotal-discount);
- for(const item of cart){
-   const b=books.find(x=>x.isbn===item.isbn);
-   if(b) b.stock=Math.max(0,(Number(b.stock)||0)-item.qty);
- }
- saveBooks();
- const invoices=JSON.parse(localStorage.getItem('dar_hawadit_invoices')||'[]');
- invoices.push({id:Date.now(),date:new Date().toISOString(),cashier:currentUser?.username||'',items:cart.map(x=>({title:x.title,isbn:x.isbn,qty:x.qty,price:x.price})),subtotal,discount,total,payment:paymentMethod});
- localStorage.setItem('dar_hawadit_invoices',JSON.stringify(invoices));
- cart=[];document.getElementById('discount').value=0;renderCart();renderBooks();renderProducts();renderReports();
- toast('تم حفظ الفاتورة رقم '+invoices[invoices.length-1].id+' — '+money(total)+' — '+paymentMethod);
-}
-function normalizeBook(b){
-  return {
-    id:b.id||('B-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),
-    title:String(b.title||b.name||''),
-    author:String(b.author||''),
-    isbn:String(b.isbn||''),
-    barcode:String(b.barcode||b.ean||''),
-    price:Number(b.price)||0,
-    cost:Number(b.cost)||0,
-    edition:String(b.edition||''),
-    pages:Number(b.pages)||0,
-    cover:String(b.cover||''),
-    publisher:String(b.publisher||'دار حواديت'),
-    category:String(b.category||''),
-    minStock:Number(b.minStock)||0,
-    stock:Number(b.stock)||0,
-    store:String(b.store||'الرئيسي'),
-    notes:String(b.notes||'')
-  };
-}
-function getInvoices(){return JSON.parse(localStorage.getItem('dar_hawadit_invoices')||'[]');}
-function saveInvoices(rows){localStorage.setItem('dar_hawadit_invoices',JSON.stringify(rows));}
-function renderReports(){
-  const invoices=getInvoices();
-  const total=invoices.reduce((s,x)=>s+(Number(x.total)||0),0);
-  const copies=invoices.reduce((s,x)=>s+(x.items||[]).reduce((a,i)=>a+(Number(i.qty)||0),0),0);
-  const avg=invoices.length?total/invoices.length:0;
-  const k=document.getElementById('reportKpis');
-  if(k) k.innerHTML=`<div class="card kpi"><small>إجمالي المبيعات</small><strong>${money(total)}</strong><span class="trend">${invoices.length} فاتورة</span></div><div class="card kpi"><small>الكتب المباعة</small><strong>${copies.toLocaleString('ar-EG')}</strong><span class="trend">نسخة</span></div><div class="card kpi"><small>متوسط الفاتورة</small><strong>${money(avg)}</strong><span class="trend">للفواتير المسجلة</span></div><div class="card kpi"><small>أعلى فاتورة</small><strong>${money(invoices.reduce((m,x)=>Math.max(m,Number(x.total)||0),0))}</strong><span class="trend">أفضل عملية بيع</span></div>`;
-  const byBook={}; invoices.forEach(inv=>(inv.items||[]).forEach(i=>{const key=i.isbn||i.title; if(!byBook[key]) byBook[key]={title:i.title||'—',qty:0,sales:0}; byBook[key].qty+=Number(i.qty)||0; byBook[key].sales+=(Number(i.qty)||0)*(Number(i.price)||0);}));
-  const top=Object.values(byBook).sort((a,b)=>b.qty-a.qty).slice(0,10);
-  const topRows=document.getElementById('topBooksRows'); if(topRows) topRows.innerHTML=top.length?top.map(x=>`<tr><td><b>${escapeHtml(x.title)}</b></td><td>${x.qty}</td><td>${money(x.sales)}</td></tr>`).join(''):`<tr><td colspan="3" style="text-align:center;color:#999">لا توجد مبيعات مسجلة</td></tr>`;
-  const payments={نقدي:{c:0,v:0},فيزا:{c:0,v:0},آجل:{c:0,v:0}}; invoices.forEach(x=>{const p=payments[x.payment]||payments['نقدي'];p.c++;p.v+=Number(x.total)||0;});
-  const pr=document.getElementById('paymentRows'); if(pr) pr.innerHTML=Object.entries(payments).map(([name,x])=>`<tr><td>${name}</td><td>${x.c}</td><td>${money(x.v)}</td></tr>`).join('');
-  const sr=document.getElementById('salesRows'); if(sr) sr.innerHTML=invoices.slice().reverse().slice(0,30).map(x=>{const cc=(x.items||[]).reduce((a,i)=>a+(Number(i.qty)||0),0);const d=new Date(x.date);return `<tr><td>${x.id}</td><td>${d.toLocaleString('ar-EG')}</td><td>${cc}</td><td>${money(x.discount||0)}</td><td><b>${money(x.total)}</b></td><td><span class="badge">${x.payment||'نقدي'}</span></td></tr>`}).join('')||`<tr><td colspan="6" style="text-align:center;color:#999">لا توجد فواتير مسجلة</td></tr>`;
-}
-function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
-function exportSalesToExcel(){
-  if(typeof XLSX==='undefined'){toast('مكتبة Excel غير متاحة');return;}
-  const invoices=getInvoices();
-  const rows=invoices.flatMap(inv=>(inv.items||[]).map(i=>({
-    'رقم الفاتورة':inv.id,'التاريخ':new Date(inv.date).toLocaleString('ar-EG'),'الكتاب':i.title,'ISBN':i.isbn,'الكمية':i.qty,'سعر الوحدة':i.price,'الإجمالي قبل الخصم':inv.subtotal,'الخصم':inv.discount,'إجمالي الفاتورة':inv.total,'طريقة الدفع':inv.payment
-  })));
-  const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,'المبيعات');XLSX.writeFile(wb,'مبيعات_دار_حواديت.xlsx');toast('تم تصدير تقرير المبيعات');
-}
-function clearSalesData(){
-  if(!guard('salesClear'))return;
-  if(!confirm('سيتم حذف سجل الفواتير والمبيعات بالكامل من هذا المتصفح. هل أنت متأكد؟'))return;
-  localStorage.removeItem('dar_hawadit_invoices'); renderReports(); toast('تم تصفير سجل المبيعات');
-}
-function saveBooks(){
- books=books.map(normalizeBook);
- localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
-}
+function completeSale(){if(!cart.length){toast("أضف كتابًا أولًا");return}toast("تم حفظ الفاتورة وطباعة الإيصال (تجريبي)");cart=[];renderCart()}
 function renderBooks(){
  const q=(document.getElementById("bookSearch")?.value||"").toLowerCase(), f=document.getElementById("stockFilter")?.value||"";
- const list=books.filter(b=>(b.title+b.author+b.isbn+b.barcode+b.category).toLowerCase().includes(q)).filter(b=>{const min=Number(b.minStock)||0;return f==="low"?(Number(b.stock)||0)<=min:f==="ok"?(Number(b.stock)||0)>min:true;});
- document.getElementById("booksRows").innerHTML=list.map(b=>{
-   const idx=books.indexOf(b), min=Number(b.minStock)||0; const stock=Number(b.stock)||0;
-   return `<tr><td><b>${escapeHtml(b.title)}</b><br><small style="color:#888">${escapeHtml(b.edition||'')} ${b.category?`• ${escapeHtml(b.category)}`:''}</small></td><td>${escapeHtml(b.author)||"—"}</td><td>${escapeHtml(b.isbn)||"—"}</td><td><b>${money(b.price)}</b></td><td><b>${stock}</b></td><td>${escapeHtml(b.store||'الرئيسي')}</td><td>${stock<=Math.max(4,min)?'<span class="badge bad">منخفض</span>':'<span class="badge good">متوفر</span>'}</td><td><button class="btn" style="padding:6px 10px" onclick="openEditBook(${idx})">تعديل كل البيانات</button></td></tr>`;
- }).join("");
+ const list=books.filter(b=>(b.title+b.author+b.isbn).toLowerCase().includes(q)).filter(b=>f==="low"?b.stock<=10:f==="ok"?b.stock>10:true);
+ document.getElementById("booksRows").innerHTML=list.map(b=>`<tr><td><b>${b.title}</b></td><td>${b.author||"—"}</td><td>${b.isbn}</td><td>${money(b.price)}</td><td>${b.stock}</td><td>${b.store}</td><td>${b.stock<=4?'<span class="badge bad">حرج</span>':b.stock<=10?'<span class="badge warn">منخفض</span>':'<span class="badge good">متوفر</span>'}</td></tr>`).join("");
 }
-function openBook(){ if(!guard('addBook')) return;
+function openBook(){
  document.getElementById("modalTitle").textContent="إضافة كتاب";
- document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid">
- <div><label>اسم الكتاب</label><input id="bt" placeholder="اسم الكتاب"></div><div><label>المؤلف</label><input id="ba" placeholder="اسم المؤلف"></div><div><label>ISBN</label><input id="bi" placeholder="ISBN"></div>
- <div><label>Barcode</label><input id="bb" placeholder="Barcode"></div><div><label>سعر البيع</label><input id="bp" type="number" min="0"></div><div><label>سعر التكلفة</label><input id="bc" type="number" min="0"></div>
- <div><label>الطبعة</label><input id="bed" placeholder="الأولى"></div><div><label>عدد الصفحات</label><input id="bpages" type="number" min="0"></div><div><label>دار النشر</label><input id="bpub" value="دار حواديت"></div>
- <div><label>التصنيف</label><input id="bcat" placeholder="رواية / تاريخ / علم نفس..."></div><div><label>الحد الأدنى للمخزون</label><input id="bmin" type="number" min="0"></div><div><label>المخزن</label><input id="bstore" value="الرئيسي"></div>
- <div style="grid-column:1/-1"><label>صورة الغلاف (رابط)</label><input id="bcover" placeholder="رابط صورة الغلاف"></div><div style="grid-column:1/-1"><label>ملاحظات</label><input id="bnotes" placeholder="ملاحظات عن الكتاب"></div>
- <div><label>الرصيد</label><input id="bs" type="number" min="0"></div></div>
- <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveBook()">حفظ الكتاب</button></div></div>`;
+ document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid"><div><label>اسم الكتاب</label><input id="bt" placeholder="اسم الكتاب"></div><div><label>المؤلف</label><input id="ba" placeholder="اسم المؤلف"></div><div><label>ISBN</label><input id="bi" placeholder="ISBN"></div><div><label>السعر</label><input id="bp" type="number" placeholder="0"></div><div><label>الرصيد</label><input id="bs" type="number" placeholder="0"></div><div><label>الطبعة</label><input placeholder="الأولى"></div></div><div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveBook()">حفظ الكتاب</button></div></div>`;
  document.getElementById("modal").classList.add("show");
 }
-function openImport(){ if(!guard('import')) return;
+function saveBook(){const b={title:document.getElementById("bt").value||"كتاب جديد",author:document.getElementById("ba").value,isbn:document.getElementById("bi").value||Date.now().toString(),price:Number(document.getElementById("bp").value||0),stock:Number(document.getElementById("bs").value||0),store:"الرئيسي"};books.unshift(b);closeModal();renderBooks();renderProducts();toast("تمت إضافة الكتاب")}
+function openImport(){
  document.getElementById("modalTitle").textContent="استيراد قائمة الكتب من Excel";
- document.getElementById("modalBody").innerHTML=`<div class="drop"><b>ارفع ملف Excel</b><p>يدعم النظام الآن: <b>الكتاب</b> أو <b>اسم الكتاب</b>، المؤلف، ISBN، السعر، الرصيد/الكمية، المخزن</p><input id="excelFile" type="file" accept=".xlsx,.xls,.csv" style="margin-top:12px"></div><div style="margin-top:14px;font-size:12px;color:#888">سيتم تنظيف المسافات تلقائيًا والتعرف على أسماء الأعمدة حتى لو كانت مختلفة قليلًا.</div>`;
+ document.getElementById("modalBody").innerHTML=`<div class="drop"><b>ارفع ملف Excel</b><p>الأعمدة المدعومة: اسم الكتاب، المؤلف، ISBN، السعر، الرصيد، المخزن</p><input id="excelFile" type="file" accept=".xlsx,.xls,.csv" style="margin-top:12px"></div><div style="margin-top:14px;font-size:12px;color:#888">سيتم قراءة الملف ومعاينة البيانات قبل اعتمادها في النسخة الكاملة.</div>`;
  document.getElementById("modal").classList.add("show");
  document.getElementById("excelFile").onchange=e=>handleExcel(e.target.files[0]);
-}
-function normalizeExcelKey(value){
- return String(value ?? "").replace(/\uFEFF/g, "").replace(/\s+/g, " ").trim().toLowerCase();
-}
-function getExcelValue(row, aliases){
- const normalized = {};
- Object.keys(row).forEach(k => normalized[normalizeExcelKey(k)] = row[k]);
- for(const alias of aliases){
-  const key = normalizeExcelKey(alias);
-  if(Object.prototype.hasOwnProperty.call(normalized,key) && normalized[key] !== "") return normalized[key];
- }
- return "";
-}
-function toNumber(value){
- const cleaned = String(value ?? "").replace(/[,،]/g, "").trim();
- const n = Number(cleaned);
- return Number.isFinite(n) ? n : 0;
 }
 function handleExcel(file){
  if(!file)return;
  const reader=new FileReader();
  reader.onload=e=>{
   try{
-   const workbook=XLSX.read(e.target.result,{type:"array"});
-   const ws=workbook.Sheets[workbook.SheetNames[0]];
-   const rows=XLSX.utils.sheet_to_json(ws,{defval:"", raw:true});
-   if(!rows.length){ toast("ملف Excel فارغ"); return; }
-
-   let imported=0, skipped=0;
-   rows.forEach(r=>{
-    const title=getExcelValue(r,["الكتاب","اسم الكتاب","العنوان","title","book","book title"]);
-    if(!String(title).trim()){ skipped++; return; }
-    const author=getExcelValue(r,["المؤلف","اسم المؤلف","author"]);
-    const isbn=getExcelValue(r,["ISBN","isbn","الترقيم الدولي","الرقم الدولي"]);
-    const price=getExcelValue(r,["السعر","سعر البيع","price","selling price"]);
-    const stock=getExcelValue(r,["الرصيد","الكمية","المخزون","stock","qty","quantity"]);
-    const store=getExcelValue(r,["المخزن","المخزن الحالي","store","warehouse"]) || "الرئيسي";
-    books.push({
-      title:String(title).trim(),
-      author:String(author).trim(),
-      isbn:String(isbn).trim() || ("EXCEL-" + Date.now() + "-" + imported),
-      price:toNumber(price),
-      stock:toNumber(stock),
-      store:String(store).trim()
-    });
-    imported++;
-   });
-
-   saveBooks();
-   renderBooks();renderProducts();
-   closeModal();
-   toast(`تم استيراد ${imported} كتاب${skipped ? ` — تم تخطي ${skipped} صف بدون اسم كتاب` : ""}`);
-  }catch(err){
-   console.error(err);
-   toast("تعذر قراءة ملف Excel");
-  }
+   const wb=XLSX.read(e.target.result,{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]];
+   const rows=XLSX.utils.sheet_to_json(ws,{defval:""});
+   rows.forEach(r=>{books.push({title:r["اسم الكتاب"]||r.title||"بدون اسم",author:r["المؤلف"]||r.author||"",isbn:String(r["ISBN"]||r.isbn||Date.now()),price:Number(r["السعر"]||r.price||0),stock:Number(r["الرصيد"]||r.stock||0),store:r["المخزن"]||r.store||"الرئيسي"})});
+   renderBooks();renderProducts();toast(`تم استيراد ${rows.length} كتاب تجريبيًا`);closeModal();
+  }catch(err){toast("تعذر قراءة الملف")}
  };
  reader.readAsArrayBuffer(file);
 }
-
-function openEditBook(idx){ if(!guard('editBook')) return;
- const b=books[idx];
- if(!b){toast("الكتاب غير موجود");return;}
- document.getElementById("modalTitle").textContent="تعديل كل بيانات الكتاب";
- document.getElementById("modalBody").innerHTML=`<div class="form"><div class="form-grid">
- <div><label>اسم الكتاب</label><input id="editTitle" value="${escapeHtml(b.title)}"></div><div><label>المؤلف</label><input id="editAuthor" value="${escapeHtml(b.author)}"></div><div><label>ISBN</label><input id="editIsbn" value="${escapeHtml(b.isbn)}"></div>
- <div><label>Barcode</label><input id="editBarcode" value="${escapeHtml(b.barcode)}"></div><div><label>سعر البيع</label><input id="editPrice" type="number" min="0" step="0.01" value="${Number(b.price)||0}"></div><div><label>سعر التكلفة</label><input id="editCost" type="number" min="0" step="0.01" value="${Number(b.cost)||0}"></div>
- <div><label>الطبعة</label><input id="editEdition" value="${escapeHtml(b.edition)}"></div><div><label>عدد الصفحات</label><input id="editPages" type="number" min="0" value="${Number(b.pages)||0}"></div><div><label>دار النشر</label><input id="editPublisher" value="${escapeHtml(b.publisher||'دار حواديت')}"></div>
- <div><label>التصنيف</label><input id="editCategory" value="${escapeHtml(b.category)}"></div><div><label>الحد الأدنى للمخزون</label><input id="editMinStock" type="number" min="0" value="${Number(b.minStock)||0}"></div><div><label>المخزن</label><input id="editStore" value="${escapeHtml(b.store||'الرئيسي')}"></div>
- <div><label>الكمية / الرصيد</label><input id="editStock" type="number" min="0" step="1" value="${Number(b.stock)||0}"></div><div style="grid-column:2/-1"><label>رابط صورة الغلاف</label><input id="editCover" value="${escapeHtml(b.cover)}"></div><div style="grid-column:1/-1"><label>ملاحظات</label><input id="editNotes" value="${escapeHtml(b.notes)}"></div>
- </div>
- <div style="margin-top:12px;color:#888;font-size:12px">الربح التقريبي للنسخة: <b>${money((Number(b.price)||0)-(Number(b.cost)||0))}</b></div>
- <div style="margin-top:18px;display:flex;justify-content:space-between;gap:8px;align-items:center"><button class="btn" onclick="adjustStock(-1)">− نسخة</button><div style="display:flex;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveEditedBook(${idx})">حفظ كل التعديلات</button></div><button class="btn" onclick="adjustStock(1)">+ نسخة</button></div></div>`;
- document.getElementById("modal").classList.add("show");
-}
-function adjustStock(delta){const input=document.getElementById("editStock");if(!input)return;input.value=Math.max(0,Number(input.value||0)+delta);}
-function saveEditedBook(idx){
- const old=books[idx];
- books[idx]=normalizeBook({
-   id:old.id,title:document.getElementById('editTitle').value.trim(),author:document.getElementById('editAuthor').value.trim(),isbn:document.getElementById('editIsbn').value.trim(),barcode:document.getElementById('editBarcode').value.trim(),
-   price:Number(document.getElementById('editPrice').value||0),cost:Number(document.getElementById('editCost').value||0),edition:document.getElementById('editEdition').value.trim(),pages:Number(document.getElementById('editPages').value||0),publisher:document.getElementById('editPublisher').value.trim(),category:document.getElementById('editCategory').value.trim(),minStock:Number(document.getElementById('editMinStock').value||0),stock:Number(document.getElementById('editStock').value||0),store:document.getElementById('editStore').value.trim(),cover:document.getElementById('editCover').value.trim(),notes:document.getElementById('editNotes').value.trim()
- });
- saveBooks();closeModal();renderBooks();renderProducts();renderReports();toast('تم حفظ كل بيانات الكتاب');
-}
-
-function openUserModal(){
- if(!guard('users')) return;
- document.getElementById('modalTitle').textContent='إضافة مستخدم';
- document.getElementById('modalBody').innerHTML=`<div class="form"><div class="form-grid" style="grid-template-columns:1fr 1fr"><div><label>اسم المستخدم</label><input id="nu" autocomplete="off"></div><div><label>الاسم الظاهر</label><input id="nn"></div><div><label>كلمة المرور</label><input id="np" type="password"></div><div><label>الدور</label><select id="nr"><option value="cashier">كاشير</option><option value="storekeeper">أمين مخزن</option><option value="accountant">محاسب</option><option value="admin">مدير النظام</option></select></div></div><div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px"><button class="btn" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveUser()">حفظ المستخدم</button></div></div>`;
- document.getElementById('modal').classList.add('show');
-}
-function saveUser(){
- const username=document.getElementById('nu').value.trim(), name=document.getElementById('nn').value.trim(), pass=document.getElementById('np').value, role=document.getElementById('nr').value;
- if(!username||!name||pass.length<4){toast('أدخل البيانات وكلمة مرور 4 أحرف على الأقل');return;}
- const users=loadUsers(); if(users.some(x=>x.username===username)){toast('اسم المستخدم موجود بالفعل');return;}
- users.push({username,name,role,passwordHash:realHash(pass),active:true}); saveUsers(users); renderUsers(); closeModal(); toast('تم إنشاء المستخدم '+username);
-}
-function renderUsers(){
- const box=document.getElementById('usersList'); if(!box)return; const users=loadUsers();
- box.innerHTML=users.map((u,i)=>`<div class="role-card"><div><b>${u.name}</b><div style="font-size:12px;color:#888;margin-top:4px">@${u.username} — ${ROLE_LABELS[u.role]||u.role} ${u.active===false? '— موقوف':''}</div></div><div style="display:flex;gap:6px"><button class="btn" style="padding:7px 10px" onclick="toggleUser(${i})">${u.active===false?'تفعيل':'إيقاف'}</button><button class="btn" style="padding:7px 10px" onclick="changeUserPassword(${i})">كلمة السر</button>${u.username!=='admin'?`<button class="btn" style="padding:7px 10px" onclick="deleteUser(${i})">حذف</button>`:''}</div></div>`).join('');
-}
-function toggleUser(i){const users=loadUsers(); users[i].active=!users[i].active; saveUsers(users); renderUsers(); toast(users[i].active?'تم تفعيل المستخدم':'تم إيقاف المستخدم');}
-function deleteUser(i){const users=loadUsers(); if(users[i].username==='admin'){toast('لا يمكن حذف المستخدم الرئيسي');return;} if(confirm('حذف المستخدم نهائيًا؟')){users.splice(i,1);saveUsers(users);renderUsers();toast('تم حذف المستخدم');}}
-function changeUserPassword(i){const users=loadUsers(); const pass=prompt('أدخل كلمة المرور الجديدة (4 أحرف على الأقل):'); if(!pass||pass.length<4)return; users[i].passwordHash=realHash(pass); saveUsers(users); renderUsers(); toast('تم تغيير كلمة المرور');}
-
 function closeModal(){document.getElementById("modal").classList.remove("show")}
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";setTimeout(()=>t.style.display="none",2600)}
-renderProducts();renderCart();renderBooks();renderUsers();initAuth();
+renderProducts();renderCart();renderBooks();
 </script>
 </body></html>
