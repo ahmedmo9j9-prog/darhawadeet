@@ -1,22 +1,81 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>دار حواديت | نظام الإدارة</title>
-<link rel="icon" href="logo.jpg"><link rel="stylesheet" href="styles.css">
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ef5b3d">
+  <title>دار حواديت | نظام الإدارة</title>
+  <link rel="icon" href="logo.jpg">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-<div id="login" class="login"><div class="login-card">
-<img src="logo.jpg" class="logo"><h1>دار حواديت</h1><div class="slogan">حواديت متع عقلك</div>
-<div id="configBox"></div>
-<form id="loginForm"><label>اسم المستخدم<input id="username" required autocomplete="username"></label><label>كلمة المرور<input id="password" type="password" required autocomplete="current-password"></label><button class="primary wide">دخول</button><div id="loginError" class="error"></div></form>
-</div></div>
-<div id="app" class="hidden">
-<aside class="side"><div class="brand"><img src="logo.jpg"><div><b>دار حواديت</b><span>حواديت متع عقلك</span></div></div><nav id="nav"></nav><div class="me"><div id="meAvatar" class="avatar">ح</div><div><b id="meName">—</b><span id="meRole">—</span></div><button id="logout" class="icon">↪</button></div></aside>
-<main><header><div><h2 id="title">لوحة التحكم</h2><p>نظام إدارة دار حواديت للنشر</p></div><div class="header-actions"><select id="warehouseSelect"></select><button id="refresh" class="btn">↻ تحديث</button></div></header><div id="pages"></div></main>
-</div>
-<div id="modal" class="modal hidden"><div class="modal-card"><div class="modal-head"><h3 id="modalTitle"></h3><button id="closeModal" class="icon">×</button></div><div id="modalBody"></div></div></div>
-<div id="toast" class="toast"></div><div id="print" class="hidden"></div>
-<script type="module" src="app.js"></script>
-</body></html>
+  <section id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <img src="logo.jpg" class="auth-logo" alt="شعار دار حواديت">
+      <h1>دار حواديت</h1>
+      <p class="slogan">حواديت متع عقلك</p>
+      <div id="connectionPanel" class="connection-panel">
+        <div class="section-heading">إعداد الاتصال السحابي</div>
+        <p class="small muted">أدخل بيانات Supabase العامة. لا تضع أي Secret أو Service Role Key هنا.</p>
+        <form id="connectionForm" class="stack">
+          <label>Project URL<input id="projectUrl" type="url" placeholder="https://xxxxxxxx.supabase.co" required></label>
+          <label>Publishable / anon key<input id="publishableKey" type="text" placeholder="sb_publishable_..." required autocomplete="off"></label>
+          <button class="btn btn-primary" type="submit">حفظ الاتصال والتحقق</button>
+          <div id="connectionMessage" class="message"></div>
+        </form>
+      </div>
+      <div id="authForms" class="hidden">
+        <form id="loginForm" class="stack">
+          <div class="section-heading">تسجيل الدخول</div>
+          <label>اسم المستخدم أو البريد الإلكتروني<input id="loginIdentifier" autocomplete="username" required></label>
+          <label>كلمة المرور<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+          <button class="btn btn-primary" type="submit">دخول إلى النظام</button>
+          <button class="link-button" id="forgotPassword" type="button">نسيت كلمة المرور؟</button>
+          <div id="loginMessage" class="message"></div>
+        </form>
+        <form id="firstManagerForm" class="stack hidden">
+          <div class="section-heading">إنشاء حساب المدير الأول</div>
+          <p class="small muted">لا يوجد حساب مدير بعد. أنشئ حسابك واختر كلمة المرور بنفسك؛ لا توجد كلمة مرور افتراضية.</p>
+          <label>الاسم الكامل<input id="firstFullName" required autocomplete="name"></label>
+          <label>اسم المستخدم<input id="firstUsername" required autocomplete="username" minlength="3" maxlength="32" pattern="[A-Za-z0-9._-]{3,32}" title="من 3 إلى 32 حرفًا إنجليزيًا أو رقمًا، ويسمح بالنقطة والشرطة والشرطة السفلية"></label>
+          <label>البريد الإلكتروني<input id="firstEmail" type="email" required autocomplete="email"></label>
+          <label>كلمة المرور التي تختارها<input id="firstPassword" type="password" required minlength="8" autocomplete="new-password"></label>
+          <label>تأكيد كلمة المرور<input id="firstPasswordConfirm" type="password" required minlength="8" autocomplete="new-password"></label>
+          <button class="btn btn-primary" type="submit">إنشاء حساب المدير</button>
+          <div id="firstManagerMessage" class="message"></div>
+        </form>
+        <div class="auth-bottom"><button class="link-button" id="editConnection" type="button">تعديل إعدادات الاتصال</button></div>
+      </div>
+    </div>
+    <div class="auth-foot">نظام إدارة دار حواديت للنشر · بيانات مشتركة عبر Supabase</div>
+  </section>
+
+  <div id="application" class="application hidden">
+    <aside class="sidebar">
+      <div class="brand"><img src="logo.jpg" alt="شعار"><div><b>دار حواديت</b><span>حواديت متع عقلك</span></div></div>
+      <nav id="navigation"></nav>
+      <div class="sidebar-user">
+        <div class="user-avatar" id="userAvatar">ح</div>
+        <div class="user-meta"><b id="currentUserName">—</b><span id="currentUserRole">—</span></div>
+        <button class="icon-button" id="changePasswordButton" title="تغيير كلمة المرور">🔑</button>
+        <button class="icon-button" id="logoutButton" title="خروج">↪</button>
+      </div>
+    </aside>
+    <main class="main-content">
+      <header class="topbar">
+        <div><h2 id="pageTitle">لوحة التحكم</h2><p>نظام إدارة دار حواديت للنشر</p></div>
+        <div class="topbar-actions"><span class="online-indicator"><i></i> متصل بالسحابة</span><select id="activeWarehouse" aria-label="المخزن النشط"></select><button id="refreshButton" class="btn">↻ تحديث</button></div>
+      </header>
+      <div id="pageRoot"></div>
+    </main>
+  </div>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card"><div class="modal-head"><h3 id="modalTitle"></h3><button id="modalClose" class="icon-button" aria-label="إغلاق">×</button></div><div id="modalBody"></div></div>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <div id="printRoot" class="hidden"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

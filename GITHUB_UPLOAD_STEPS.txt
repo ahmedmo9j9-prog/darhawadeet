@@ -1,0 +1,16 @@
+رفع نظام دار حواديت على GitHub Pages
+
+1) فك ضغط dar_hawadit_github_ready.zip على جهاز الكمبيوتر.
+2) افتح المستودع: https://github.com/ahmedmo9j9-prog/hawadeet
+3) احتفظ بنسخة احتياطية من الملفات القديمة قبل الاستبدال.
+4) ارفع محتويات المجلد إلى جذر المستودع، وليس ملف ZIP نفسه.
+5) حافظ على المسار التالي كما هو:
+   supabase/functions/admin-create-user/index.ts
+6) اضغط Commit changes.
+7) من Settings > Pages تأكد من النشر من فرع main ومجلد /(root).
+8) في Supabase استخدم مشروعًا جديدًا. شغّل schema.sql مرة واحدة في SQL Editor.
+9) انشر Edge Function باسم admin-create-user من محتوى الملف المشار إليه.
+10) لا ترفع Service Role Key أو أي مفتاح سري إلى GitHub. أدخل Project URL وPublishable/anon key العامة في الموقع.
+11) افتح الموقع عبر HTTPS ثم أنشئ أول مدير من الشاشة واختر كلمة مروره بنفسك.
+
+مهم: رفع الملفات وحده لا ينشئ جداول Supabase ولا ينشر Edge Function. يجب تنفيذ الخطوات 8 و9 وإعداد Redirect URLs في Supabase قبل استخدام تسجيل الدخول.
