@@ -189,10 +189,10 @@ function drawNavigation(){
   $('navigation').innerHTML=NAV.filter(n=>n.roles.includes(profile.role)).map(n=>`<button class="nav-item ${n.id===currentPage?'active':''}" data-page="${n.id}"><span class="nav-icon">${n.icon}</span><span>${n.title}</span></button>`).join('');
   $('navigation').querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>renderPage(b.dataset.page));
 }
-async function renderPage(page){
+async function renderPage(page,opts={}){
   const item=NAV.find(n=>n.id===page&&n.roles.includes(profile?.role));if(!item){page='dashboard';}
   currentPage=page;drawNavigation();$('pageTitle').textContent=(NAV.find(n=>n.id===page)||NAV[0]).title;
-  $('pageRoot').innerHTML='<div class="loading-card">جارٍ تحميل البيانات من قاعدة البيانات…</div>';
+  if(!opts.silent)$('pageRoot').innerHTML='<div class="loading-card">جارٍ تحميل البيانات من قاعدة البيانات…</div>';
   try{
     switch(page){
       case'dashboard':await renderDashboard();break;
@@ -212,14 +212,27 @@ async function renderPage(page){
     }
   }catch(e){$('pageRoot').innerHTML=`<div class="notice notice-error"><b>تعذر تحميل الصفحة</b><p>${esc(errText(e))}</p><button class="btn" data-action="retry-page">إعادة المحاولة</button></div>`;}
 }
+let liveTimer=null;
+function liveRefresh(pages){
+  if(!pages.includes(currentPage))return;
+  clearTimeout(liveTimer);
+  liveTimer=setTimeout(function tryRefresh(){
+    if(!pages.includes(currentPage))return;
+    const modalOpen=!$('modal').classList.contains('hidden');
+    const a=document.activeElement;
+    const typing=a&&$('pageRoot').contains(a)&&['INPUT','TEXTAREA','SELECT'].includes(a.tagName);
+    if(modalOpen||typing){liveTimer=setTimeout(tryRefresh,4000);return;}
+    renderPage(currentPage,{silent:true});
+  },1500);
+}
 function setupRealtime(){
   if(realtimeChannel)sb.removeChannel(realtimeChannel);
   realtimeChannel=sb.channel('hawadit-live-data')
-    .on('postgres_changes',{event:'*',schema:'public',table:'books'},()=>{if(['books','pos','dashboard','reports'].includes(currentPage))renderPage(currentPage);})
-    .on('postgres_changes',{event:'*',schema:'public',table:'inventory'},()=>{if(['books','pos','dashboard','warehouses'].includes(currentPage))renderPage(currentPage);})
-    .on('postgres_changes',{event:'*',schema:'public',table:'invoices'},()=>{if(['invoices','dashboard','reports'].includes(currentPage))renderPage(currentPage);})
-    .on('postgres_changes',{event:'*',schema:'public',table:'cashier_shifts'},()=>{if(['shifts','pos','dashboard','reports'].includes(currentPage))renderPage(currentPage);})
-    .on('postgres_changes',{event:'*',schema:'public',table:'expenses'},()=>{if(['expenses','dashboard','reports'].includes(currentPage))renderPage(currentPage);})
+    .on('postgres_changes',{event:'*',schema:'public',table:'books'},()=>liveRefresh(['books','pos','dashboard','reports']))
+    .on('postgres_changes',{event:'*',schema:'public',table:'inventory'},()=>liveRefresh(['books','pos','dashboard','warehouses']))
+    .on('postgres_changes',{event:'*',schema:'public',table:'invoices'},()=>liveRefresh(['invoices','dashboard','reports']))
+    .on('postgres_changes',{event:'*',schema:'public',table:'cashier_shifts'},()=>liveRefresh(['shifts','pos','dashboard','reports']))
+    .on('postgres_changes',{event:'*',schema:'public',table:'expenses'},()=>liveRefresh(['expenses','dashboard','reports']))
     .subscribe();
 }
 
@@ -237,20 +250,63 @@ async function getBooksAndInventory(warehouseId=activeWarehouse?.id){
   const qtys=new Map(pageInventory.map(x=>[x.book_id,Number(x.qty)||0]));return pageBooks.map(b=>({...b,stock_qty:qtys.get(b.id)||0}));
 }
 function canEditBooks(){return ['manager','warehouse'].includes(profile.role);}
+let selectedBookIds=new Set();let shownBooks=[];
+function updateBookSelectionUI(){
+  const n=selectedBookIds.size;const btn=$('deleteSelectedBooks');
+  if(btn){btn.style.display=n?'':'none';btn.disabled=false;}
+  const c=$('selCount');if(c)c.textContent=n.toLocaleString('ar-EG');
+  const all=$('selectAllBooks');
+  if(all){const sel=shownBooks.filter(b=>selectedBookIds.has(b.id)).length;all.checked=shownBooks.length>0&&sel===shownBooks.length;all.indeterminate=sel>0&&sel<shownBooks.length;}
+}
+async function deleteSelectedBooks(){
+  if(!canEditBooks())return;
+  const ids=[...selectedBookIds];if(!ids.length)return;
+  if(!confirm(`سيتم حذف ${ids.length} كتاب.\nالكتب المرتبطة بفواتير أو حركات مخزون سابقة لا يمكن حذفها نهائيًا، وسيتم إخفاؤها (أرشفتها) بدلًا من ذلك.\nهل تريد المتابعة؟`))return;
+  const btn=$('deleteSelectedBooks');if(btn)btn.disabled=true;
+  let deleted=0,archived=0,failed=0,lastErr='';
+  for(let i=0;i<ids.length;i+=100){
+    const part=ids.slice(i,i+100);
+    const r=await sb.from('books').delete().in('id',part).select('id');
+    let remaining=part;
+    if(!r.error){const done=new Set((r.data||[]).map(x=>x.id));deleted+=done.size;remaining=part.filter(id=>!done.has(id));}
+    for(const id of remaining){
+      const d=await sb.from('books').delete().eq('id',id).select('id');
+      if(!d.error&&(d.data||[]).length){deleted++;continue;}
+      if(d.error&&d.error.code==='23503'){
+        const u=await sb.from('books').update({active:false}).eq('id',id).select('id');
+        if(u.error||!(u.data||[]).length){failed++;lastErr=u.error?errText(u.error):'لا تملك صلاحية';}else archived++;
+      }else{failed++;lastErr=d.error?errText(d.error):'لا تملك صلاحية الحذف';}
+    }
+  }
+  selectedBookIds.clear();
+  const parts=[];if(deleted)parts.push(`تم حذف ${deleted}`);if(archived)parts.push(`تمت أرشفة ${archived} (مرتبطة بحركات سابقة)`);if(failed)parts.push(`تعذر ${failed}: ${lastErr}`);
+  toast(parts.join(' · ')||'لم يتم حذف شيء',failed>0);
+  await renderPage('books',{silent:true});
+}
 async function renderBooks(){
+  const prevQ=$('bookSearch')?.value||'',prevF=$('bookStockFilter')?.value||'all';
   const books=await getBooksAndInventory();
-  const controls=canEditBooks()?`<button class="btn btn-primary" data-action="new-book">+ إضافة كتاب</button><button class="btn" data-action="import-excel">استيراد Excel</button><button class="btn" data-action="export-books">تصدير Excel</button>`:'';
+  const existing=new Set(books.map(b=>b.id));selectedBookIds=new Set([...selectedBookIds].filter(id=>existing.has(id)));shownBooks=books;
+  const controls=canEditBooks()?`<button class="btn btn-primary" data-action="new-book">+ إضافة كتاب</button><button class="btn" data-action="import-excel">استيراد Excel</button><button class="btn" data-action="export-books">تصدير Excel</button><button class="btn" id="deleteSelectedBooks" data-action="delete-selected-books" style="display:none;color:var(--bad);border-color:var(--bad)">🗑 حذف المحدد (<span id="selCount">0</span>)</button>`:'';
   $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>كتالوج الكتب والمخزون</h3><p>تعديل كل بيانات الكتاب ورصيد كل مخزن بشكل مستقل</p></div><div class="tool-actions">${controls}</div></div>
     <div class="panel"><div class="toolbar"><input id="bookSearch" placeholder="بحث بالعنوان أو المؤلف أو ISBN أو Barcode"><select id="bookStockFilter"><option value="all">كل الأرصدة</option><option value="low">تحت حد التنبيه</option><option value="zero">نفد المخزون</option></select><span id="bookCount" class="muted">${books.length} كتاب</span></div><div id="booksTable">${booksTable(books)}</div></div>`;
   $('bookSearch').oninput=()=>filterBookTable(books);$('bookStockFilter').onchange=()=>filterBookTable(books);
+  $('booksTable').addEventListener('change',e=>{
+    const t=e.target;
+    if(t.id==='selectAllBooks'){shownBooks.forEach(b=>t.checked?selectedBookIds.add(b.id):selectedBookIds.delete(b.id));document.querySelectorAll('.book-check').forEach(c=>c.checked=t.checked);}
+    else if(t.classList&&t.classList.contains('book-check')){t.checked?selectedBookIds.add(t.dataset.id):selectedBookIds.delete(t.dataset.id);}
+    updateBookSelectionUI();
+  });
+  if(prevQ||prevF!=='all'){$('bookSearch').value=prevQ;$('bookStockFilter').value=prevF;filterBookTable(books);}else updateBookSelectionUI();
 }
 function booksTable(books){
-  return table(['الكتاب','المؤلف','ISBN / Barcode','سعر البيع','التكلفة','الرصيد الحالي','الحالة','إجراءات'],books.map(b=>`<tr><td><div class="book-cell">${b.cover_url?`<img src="${esc(b.cover_url)}" alt="" onerror="this.style.display='none'">`:''}<b>${esc(b.title)}</b><small>${esc(b.edition||'')}</small></div></td><td>${esc(b.author_name||'—')}</td><td>${esc(b.isbn||'—')}<small class="subline">${esc(b.barcode||'')}</small></td><td>${money(b.sale_price)}</td><td>${money(b.cost_price)}</td><td><b>${b.stock_qty}</b></td><td><span class="badge ${b.stock_qty<=0?'badge-danger':b.stock_qty<=b.min_stock?'badge-warning':'badge-ok'}">${b.stock_qty<=0?'نفد':b.stock_qty<=b.min_stock?'منخفض':'متوفر'}</span></td><td>${canEditBooks()?`<button class="btn btn-sm" data-action="edit-book" data-id="${b.id}">تعديل</button>`:'—'}</td></tr>`).join(''),'لا توجد كتب. أضف كتابًا أو استورد ملف Excel.');
+  const ed=canEditBooks();return table([...(ed?['<input type="checkbox" id="selectAllBooks" title="تحديد الكل">']:[]),'الكتاب','المؤلف','ISBN / Barcode','سعر البيع','التكلفة','الرصيد الحالي','الحالة','إجراءات'],books.map(b=>`<tr>${ed?`<td><input type="checkbox" class="book-check" data-id="${b.id}" ${selectedBookIds.has(b.id)?'checked':''}></td>`:''}<td><div class="book-cell">${b.cover_url?`<img src="${esc(b.cover_url)}" alt="" onerror="this.style.display='none'">`:''}<b>${esc(b.title)}</b><small>${esc(b.edition||'')}</small></div></td><td>${esc(b.author_name||'—')}</td><td>${esc(b.isbn||'—')}<small class="subline">${esc(b.barcode||'')}</small></td><td>${money(b.sale_price)}</td><td>${money(b.cost_price)}</td><td><b>${b.stock_qty}</b></td><td><span class="badge ${b.stock_qty<=0?'badge-danger':b.stock_qty<=b.min_stock?'badge-warning':'badge-ok'}">${b.stock_qty<=0?'نفد':b.stock_qty<=b.min_stock?'منخفض':'متوفر'}</span></td><td>${canEditBooks()?`<button class="btn btn-sm" data-action="edit-book" data-id="${b.id}">تعديل</button>`:'—'}</td></tr>`).join(''),'لا توجد كتب. أضف كتابًا أو استورد ملف Excel.');
 }
 function filterBookTable(books){
   const q=$('bookSearch').value.trim().toLowerCase();const f=$('bookStockFilter').value;
   const list=books.filter(b=>(`${b.title} ${b.author_name||''} ${b.isbn||''} ${b.barcode||''}`).toLowerCase().includes(q)).filter(b=>f==='low'?b.stock_qty<=b.min_stock:f==='zero'?b.stock_qty<=0:true);
-  $('booksTable').innerHTML=booksTable(list);$('bookCount').textContent=`${list.length} كتاب`;
+  shownBooks=list;const vis=new Set(list.map(b=>b.id));selectedBookIds=new Set([...selectedBookIds].filter(id=>vis.has(id)));
+  $('booksTable').innerHTML=booksTable(list);$('bookCount').textContent=`${list.length} كتاب`;updateBookSelectionUI();
 }
 function bookForm(book=null,stock=0){
   const b=book||{};return `<form id="bookForm" class="form-grid"><input type="hidden" name="id" value="${esc(b.id||'')}">
@@ -485,7 +541,7 @@ async function handlePageClick(e){
    case 'retry-page':await renderPage(currentPage);break;
    case 'go-invoices':await renderPage('invoices');break;case 'go-books':await renderPage('books');break;
    case 'go-shifts':await renderPage('shifts');break;case 'open-shift':openShiftModal();break;case 'close-shift':closeShiftModal(id);break;case 'refresh-shifts':await renderPage('shifts');break;
-   case 'new-book':await openBookEditor();break;case 'edit-book':await openBookEditor(id);break;case 'import-excel':openImportExcel();break;case 'export-books':await exportBooks();break;
+   case 'delete-selected-books':await deleteSelectedBooks();break;case 'new-book':await openBookEditor();break;case 'edit-book':await openBookEditor(id);break;case 'import-excel':openImportExcel();break;case 'export-books':await exportBooks();break;
    case 'add-cart':addToCart(id);break;case 'cart-inc':{const x=cart.find(x=>x.id===id);const stock=pageInventory.find(i=>i.book_id===id)?.qty||0;if(x&&x.qty<stock){x.qty++;renderCart();}else toast('لا توجد كمية إضافية متاحة',true);break;}
    case 'cart-dec':{const x=cart.find(x=>x.id===id);if(x){x.qty--;if(x.qty<=0)cart=cart.filter(a=>a.id!==id);renderCart();}break;}
    case 'cart-remove':cart=cart.filter(x=>x.id!==id);renderCart();break;case 'checkout':await checkout();break;case 'refresh-pos':await renderPage('pos');break;
