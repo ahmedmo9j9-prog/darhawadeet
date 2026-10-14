@@ -11,6 +11,7 @@ const NAV = [
   {id:'invoices', title:'الفواتير والمبيعات', icon:'▤', roles:['manager','cashier','accountant']},
   {id:'books', title:'الكتب والمخزون', icon:'▥', roles:['manager','warehouse','accountant']},
   {id:'warehouses', title:'المخازن والتحويلات', icon:'⇄', roles:['manager','warehouse']},
+  {id:'exhibitions', title:'المعارض وكشف التعبئة', icon:'🎪', roles:['manager','warehouse']},
   {id:'authors', title:'المؤلفون', icon:'✎', roles:['manager','accountant']},
   {id:'consignment', title:'الأمانة والمكتبات', icon:'⇆', roles:['manager','accountant','warehouse']},
   {id:'printing', title:'الطباعة والطبعات', icon:'▧', roles:['manager','accountant','warehouse']},
@@ -201,6 +202,7 @@ async function renderPage(page,opts={}){
       case'shifts':await renderShifts();break;
       case'invoices':await renderInvoices();break;
       case'warehouses':await renderWarehouses();break;
+      case'exhibitions':await renderExhibitions();break;
       case'authors':await renderAuthors();break;
       case'consignment':await renderConsignment();break;
       case'printing':await renderPrinting();break;
@@ -229,7 +231,7 @@ function setupRealtime(){
   if(realtimeChannel)sb.removeChannel(realtimeChannel);
   realtimeChannel=sb.channel('hawadit-live-data')
     .on('postgres_changes',{event:'*',schema:'public',table:'books'},()=>liveRefresh(['books','pos','dashboard','reports']))
-    .on('postgres_changes',{event:'*',schema:'public',table:'inventory'},()=>liveRefresh(['books','pos','dashboard','warehouses']))
+    .on('postgres_changes',{event:'*',schema:'public',table:'inventory'},()=>liveRefresh(['books','pos','dashboard','warehouses','exhibitions']))
     .on('postgres_changes',{event:'*',schema:'public',table:'invoices'},()=>liveRefresh(['invoices','dashboard','reports']))
     .on('postgres_changes',{event:'*',schema:'public',table:'cashier_shifts'},()=>liveRefresh(['shifts','pos','dashboard','reports']))
     .on('postgres_changes',{event:'*',schema:'public',table:'expenses'},()=>liveRefresh(['expenses','dashboard','reports']))
@@ -432,6 +434,97 @@ async function saveReturn(form){
 }
 async function exportInvoices(){const {data,error}=await sb.from('invoices').select('invoice_no,created_at,subtotal,discount,total,payment_method,status').order('created_at',{ascending:false});if(error)throw error;exportXlsx('دار-حواديت-المبيعات.xlsx',(data||[]).map(x=>({'رقم الفاتورة':x.invoice_no,'التاريخ':dateTime(x.created_at),'الإجمالي قبل الخصم':x.subtotal,'الخصم':x.discount,'الإجمالي':x.total,'الدفع':x.payment_method,'الحالة':x.status})));}
 
+/* ====== المعارض وكشف التعبئة ====== */
+async function fetchAllRows(build){const out=[];for(let from=0;;from+=1000){const {data,error}=await build().range(from,from+999);if(error)throw error;out.push(...(data||[]));if(!data||data.length<1000)break;}return out;}
+function printHtmlDoc(html){
+  const f=document.createElement('iframe');f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';document.body.appendChild(f);
+  const d=f.contentWindow.document;d.open();d.write(html);d.close();
+  setTimeout(()=>{try{f.contentWindow.focus();f.contentWindow.print();}catch(e){}setTimeout(()=>f.remove(),60000);},600);
+}
+function exStatus(w){const t=new Date().toISOString().slice(0,10);if(w.end_date&&w.end_date<t)return['انتهى','badge-warning'];if(w.start_date&&w.start_date<=t&&(!w.end_date||w.end_date>=t))return['جارٍ الآن','badge-ok'];if(w.start_date&&w.start_date>t)return['قادم',''];return['—',''];}
+async function renderExhibitions(){
+  const {data:all,error}=await sb.from('warehouses').select('*').eq('warehouse_type','exhibition').order('start_date',{ascending:false,nullsFirst:false});
+  if(error)throw error;
+  const ids=(all||[]).map(w=>w.id);
+  const inv=ids.length?await fetchAllRows(()=>sb.from('inventory').select('warehouse_id,book_id,qty').in('warehouse_id',ids).gt('qty',0).order('book_id')):[];
+  const copies=new Map(),titles=new Map();
+  inv.forEach(r=>{copies.set(r.warehouse_id,(copies.get(r.warehouse_id)||0)+Number(r.qty));titles.set(r.warehouse_id,(titles.get(r.warehouse_id)||0)+1);});
+  $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>المعارض وكشف التعبئة</h3><p>سجّل المعارض التي تشارك فيها، وجهّز كشف تعبئة بعناوين الكتب والكميات</p></div><div class="tool-actions"><button class="btn btn-primary" data-action="new-exhibition">+ معرض جديد</button></div></div><section class="panel">${table(['المعرض','المكان','من','إلى','العناوين','النسخ','الحالة','إجراءات'],(all||[]).map(w=>{const st=exStatus(w);return `<tr><td><b>${esc(w.name)}</b></td><td>${esc(w.location||'—')}</td><td>${esc(w.start_date||'—')}</td><td>${esc(w.end_date||'—')}</td><td>${titles.get(w.id)||0}</td><td>${copies.get(w.id)||0}</td><td><span class="badge ${st[1]}">${st[0]}</span></td><td><div class="tool-actions"><button class="btn btn-sm btn-primary" data-action="pack-exhibition" data-id="${w.id}">📦 تعبئة</button><button class="btn btn-sm" data-action="print-exhibition" data-id="${w.id}">🖨 كشف التعبئة</button><button class="btn btn-sm" data-action="edit-exhibition" data-id="${w.id}">تعديل</button></div></td></tr>`;}).join(''),'لا توجد معارض بعد. اضغط «معرض جديد» لإضافة أول معرض.')}</section><div class="info-strip">«تعبئة» تنقل الكتب من مخزن الدار إلى مخزن المعرض وتطبع الكشف. «كشف التعبئة» يطبع الكتب الموجودة حاليًا في مخزن المعرض.</div>`;
+}
+function exhibitionModal(w=null){
+  openModal(w?'تعديل معرض':'إضافة معرض',`<form id="exhibitionForm" class="form-grid"><input type="hidden" name="id" value="${esc(w?.id||'')}">${modalFormField('اسم المعرض *','name',w?.name||'','text','required')}${modalFormField('المكان','location',w?.location||'')}${modalFormField('من تاريخ','start_date',w?.start_date||'','date')}${modalFormField('إلى تاريخ','end_date',w?.end_date||'','date')}<div class="form-actions full"><button class="btn btn-primary">حفظ</button></div></form>`);
+}
+function printPackingList(ex,lines,note=''){
+  const logo=new URL('logo.jpg',location.href).href;
+  const total=lines.reduce((s,l)=>s+Number(l.qty||0),0);
+  const dates=[ex.start_date&&('من '+ex.start_date),ex.end_date&&('إلى '+ex.end_date)].filter(Boolean).join(' ');
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف تعبئة - ${esc(ex.name)}</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font:13px Tahoma,Arial,sans-serif;color:#111;margin:0}.head{display:flex;align-items:center;gap:14px;border-bottom:2px solid #ef5b3d;padding-bottom:10px;margin-bottom:12px}.head img{width:60px;height:60px;object-fit:cover;border-radius:10px}.head h1{margin:0;font-size:20px}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 20px;margin-bottom:12px;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #444;padding:6px 7px;text-align:right;font-size:12px}th{background:#f1f1f1}tr{page-break-inside:avoid}td.c,th.c{text-align:center}.box{display:inline-block;width:14px;height:14px;border:1.5px solid #111;vertical-align:middle}.sum{margin-top:12px;font-weight:700}.sign{display:flex;justify-content:space-between;margin-top:36px}.sign div{width:30%;border-top:1px solid #111;padding-top:6px;text-align:center}</style></head><body><div class="head"><img src="${logo}"><div><h1>كشف تعبئة معرض</h1><div>دار حواديت · حواديت متع عقلك</div></div></div><div class="meta"><div>المعرض: <b>${esc(ex.name)}</b></div><div>المكان: ${esc(ex.location||'—')}</div><div>الفترة: ${esc(dates||'—')}</div><div>تاريخ الطباعة: ${esc(new Date().toLocaleString('ar-EG'))}</div>${note?`<div>البيان: ${esc(note)}</div>`:''}</div><table><thead><tr><th class="c">م</th><th>عنوان الكتاب</th><th>المؤلف</th><th>ISBN</th><th class="c">الكمية</th><th class="c">تم التحميل</th><th class="c">عاد من المعرض</th></tr></thead><tbody>${lines.map((l,i)=>`<tr><td class="c">${i+1}</td><td><b>${esc(l.title)}</b></td><td>${esc(l.author||'')}</td><td>${esc(l.isbn||'')}</td><td class="c"><b>${Number(l.qty)}</b></td><td class="c"><span class="box"></span></td><td class="c">........</td></tr>`).join('')}</tbody></table><div class="sum">إجمالي العناوين: ${lines.length} · إجمالي النسخ: ${total}</div><div class="sign"><div>أمين المخزن</div><div>مسؤول المعرض</div><div>المراجع</div></div></body></html>`;
+  printHtmlDoc(html);
+}
+async function printExhibitionStock(exId){
+  const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
+  const inv=await fetchAllRows(()=>sb.from('inventory').select('qty,book_id,books(title,author_name,isbn)').eq('warehouse_id',exId).gt('qty',0).order('book_id'));
+  if(!inv.length){toast('لا توجد كتب في مخزن هذا المعرض بعد. استخدم «تعبئة» أولًا.',true);return;}
+  const lines=inv.map(r=>({title:r.books?.title||'',author:r.books?.author_name,isbn:r.books?.isbn,qty:r.qty})).sort((a,b)=>a.title.localeCompare(b.title,'ar'));
+  printPackingList(ex,lines,'الرصيد الحالي بمخزن المعرض');
+}
+let pack=null;
+async function loadPackSource(){
+  const [books,inv]=await Promise.all([
+    fetchAllRows(()=>sb.from('books').select('id,title,author_name,isbn,barcode').eq('active',true).order('title').order('id')),
+    fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',pack.fromId).order('book_id'))]);
+  pack.books=books;pack.stock=new Map(inv.map(r=>[r.book_id,Number(r.qty)||0]));pack.lines=new Map();
+  drawPackResults();drawPackLines();
+}
+function drawPackResults(){
+  const q=($('packSearch').value||'').trim().toLowerCase();const box=$('packResults');
+  if(!q){box.innerHTML='<div class="small muted">اكتب اسم الكتاب أو المؤلف أو الـ ISBN لإضافته.</div>';return;}
+  const list=pack.books.filter(b=>[b.title,b.author_name,b.isbn,b.barcode].some(v=>String(v||'').toLowerCase().includes(q))).slice(0,8);
+  box.innerHTML=list.length?`<div class="return-items">${list.map(b=>{const s=pack.stock.get(b.id)||0;const added=pack.lines.has(b.id);return `<div class="return-item"><div><b>${esc(b.title)}</b><small>${esc(b.author_name||'')} · الرصيد بالمصدر: ${s}</small></div><button type="button" class="btn btn-sm" data-pack-add="${b.id}" ${added?'disabled':''}>${added?'مضاف':'+ إضافة'}</button></div>`;}).join('')}</div>`:'<div class="small muted">لا توجد نتائج.</div>';
+}
+function drawPackLines(){
+  const arr=[...pack.lines.values()];
+  $('packCount').textContent=arr.length;$('packCopies').textContent=arr.reduce((s,l)=>s+l.qty,0);
+  $('packLines').innerHTML=arr.length?table(['العنوان','الرصيد بالمصدر','الكمية',''],arr.map(l=>{const s=pack.stock.get(l.book.id)||0;return `<tr><td><b>${esc(l.book.title)}</b><small class="subline">${esc(l.book.author_name||'')}</small></td><td class="${l.qty>s?'bad':''}">${s}</td><td><input type="number" min="1" value="${l.qty}" data-pack-qty="${l.book.id}" style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"></td><td><button type="button" class="delete-btn" data-pack-del="${l.book.id}">×</button></td></tr>`;}).join('')):'<div class="empty-box">لم تتم إضافة كتب بعد</div>';
+}
+const packLine=l=>({title:l.book.title,author:l.book.author_name,isbn:l.book.isbn,qty:l.qty});
+async function confirmPack(){
+  const arr=[...pack.lines.values()];
+  if(!arr.length){toast('أضف كتبًا أولًا',true);return;}
+  const over=arr.filter(l=>l.qty>(pack.stock.get(l.book.id)||0));
+  if(over.length){toast('الكمية أكبر من الرصيد المتاح: '+over.map(l=>l.book.title).join('، '),true);return;}
+  const from=warehouses.find(w=>w.id===pack.fromId);
+  if(!confirm(`سيتم تحويل ${arr.length} عنوان (${arr.reduce((s,l)=>s+l.qty,0)} نسخة) من «${from?.name||''}» إلى «${pack.ex.name}».\nهل تريد المتابعة؟`))return;
+  const btn=$('packConfirm');btn.disabled=true;
+  const ok=[],fail=[];
+  for(const l of arr){const {error}=await sb.rpc('transfer_inventory',{p_book_id:l.book.id,p_from_warehouse_id:pack.fromId,p_to_warehouse_id:pack.ex.id,p_qty:l.qty,p_notes:'تعبئة معرض: '+pack.ex.name});if(error)fail.push(`${l.book.title}: ${errText(error)}`);else ok.push(l);}
+  if(ok.length)printPackingList(pack.ex,ok.map(packLine),'تم تحويل الكميات إلى مخزن المعرض');
+  closeModal();
+  toast(fail.length?`تمت تعبئة ${ok.length} وتعذر ${fail.length}: ${fail[0]}`:`تمت تعبئة ${ok.length} عنوان`,fail.length>0);
+  await renderPage('exhibitions',{silent:true});
+}
+async function openPackModal(exId){
+  const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
+  const sources=warehouses.filter(w=>w.id!==exId);
+  if(!sources.length){toast('لا يوجد مخزن مصدر نشط',true);return;}
+  const from=(activeWarehouse&&activeWarehouse.id!==exId?activeWarehouse:sources[0]).id;
+  pack={ex,fromId:from,books:[],stock:new Map(),lines:new Map()};
+  openModal('تعبئة معرض: '+ex.name,`<div id="packRoot"><div class="form-grid"><label>من مخزن<select id="packFrom">${sources.map(w=>`<option value="${w.id}" ${w.id===from?'selected':''}>${esc(w.name)}</option>`).join('')}</select></label><label class="full">ابحث عن كتاب (العنوان / المؤلف / ISBN)<input id="packSearch" autocomplete="off" placeholder="اكتب للبحث ثم اضغط إضافة"></label></div><div id="packResults" style="margin:8px 0"></div><div class="panel-head"><h3>كشف التعبئة (<span id="packCount">0</span> عنوان / <span id="packCopies">0</span> نسخة)</h3></div><div id="packLines"></div><div class="form-actions" style="margin-top:12px"><button type="button" class="btn btn-primary" id="packConfirm">تأكيد التعبئة (تحويل المخزون) وطباعة الكشف</button><button type="button" class="btn" id="packPrintOnly">طباعة الكشف فقط (بدون تحويل)</button></div><p class="small muted">«تأكيد التعبئة» ينقل الكميات فعليًا من المخزن المصدر إلى مخزن المعرض. «طباعة الكشف فقط» لا يغيّر أي رصيد.</p></div>`);
+  const root=$('packRoot');
+  root.addEventListener('click',e=>{
+    const a=e.target.closest('[data-pack-add]');
+    if(a){const b=pack.books.find(x=>x.id===a.dataset.packAdd);if(b&&!pack.lines.has(b.id)){pack.lines.set(b.id,{book:b,qty:1});drawPackResults();drawPackLines();}return;}
+    const d=e.target.closest('[data-pack-del]');
+    if(d){pack.lines.delete(d.dataset.packDel);drawPackResults();drawPackLines();}
+  });
+  root.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.packQty){const l=pack.lines.get(t.dataset.packQty);if(l){l.qty=Math.max(1,parseInt(t.value,10)||1);drawPackLines();}}});
+  $('packSearch').oninput=drawPackResults;
+  $('packFrom').onchange=async e=>{try{pack.fromId=e.target.value;await loadPackSource();}catch(err){toast(errText(err),true);}};
+  $('packPrintOnly').onclick=()=>{const arr=[...pack.lines.values()];if(!arr.length){toast('أضف كتبًا أولًا',true);return;}printPackingList(pack.ex,arr.map(packLine),'مسودة قبل التحويل');};
+  $('packConfirm').onclick=async()=>{try{await confirmPack();}catch(err){toast(errText(err),true);const b=$('packConfirm');if(b)b.disabled=false;}};
+  await loadPackSource();
+}
+
 async function renderWarehouses(){
   const {data:all,error}=await sb.from('warehouses').select('*').order('name');if(error)throw error;
   const {data:inv}=await sb.from('inventory').select('warehouse_id,qty');const sums=new Map();(inv||[]).forEach(r=>sums.set(r.warehouse_id,(sums.get(r.warehouse_id)||0)+Number(r.qty||0)));
@@ -546,6 +639,10 @@ async function handlePageClick(e){
    case 'cart-dec':{const x=cart.find(x=>x.id===id);if(x){x.qty--;if(x.qty<=0)cart=cart.filter(a=>a.id!==id);renderCart();}break;}
    case 'cart-remove':cart=cart.filter(x=>x.id!==id);renderCart();break;case 'checkout':await checkout();break;case 'refresh-pos':await renderPage('pos');break;
    case 'print-invoice':await printSavedInvoice(id);break;case 'return-invoice':await openReturnModal(id);break;case 'export-invoices':await exportInvoices();break;
+   case 'new-exhibition':exhibitionModal();break;
+   case 'edit-exhibition':{const {data,error}=await sb.from('warehouses').select('*').eq('id',id).single();if(error)throw error;exhibitionModal(data);}break;
+   case 'pack-exhibition':await openPackModal(id);break;
+   case 'print-exhibition':await printExhibitionStock(id);break;
    case 'new-warehouse':newWarehouseModal();break;case 'transfer-stock':await transferStockModal();break;
    case 'new-author':authorModal();break;case 'edit-author':authorModal(pageAuthors.find(a=>a.id===id));break;
    case 'new-partner':partnerModal();break;case 'new-shipment':await shipmentModal();break;case 'settle-shipment':await settleShipmentModal(id);break;
@@ -566,6 +663,7 @@ async function handlePageSubmit(e){
    case'bookForm':e.preventDefault();setBusy(form,true);await saveBookFromForm(form);break;
    case'excelImportForm':e.preventDefault();setBusy(form,true);$('excelImportMessage').textContent='جارٍ استيراد الصفوف…';await importExcelForm(form);break;
    case'warehouseForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const {error}=await sb.from('warehouses').insert({name:String(fd.get('name')).trim(),warehouse_type:String(fd.get('warehouse_type')),location:String(fd.get('location')||'').trim()||null});if(error)throw error;closeModal();await loadWarehouses();await renderPage('warehouses');toast('تم إضافة المخزن');}break;
+   case'exhibitionForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const row={name:String(fd.get('name')).trim(),warehouse_type:'exhibition',location:String(fd.get('location')||'').trim()||null,start_date:fd.get('start_date')||null,end_date:fd.get('end_date')||null};if(row.start_date&&row.end_date&&row.end_date<row.start_date)throw new Error('تاريخ النهاية قبل تاريخ البداية');const eid=String(fd.get('id')||'');const {error}=eid?await sb.from('warehouses').update(row).eq('id',eid):await sb.from('warehouses').insert(row);if(error)throw error;closeModal();await loadWarehouses();await renderPage('exhibitions');toast(eid?'تم تحديث المعرض':'تمت إضافة المعرض');}break;
    case'transferForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const {error}=await sb.rpc('transfer_inventory',{p_book_id:fd.get('book_id'),p_from_warehouse_id:fd.get('from_id'),p_to_warehouse_id:fd.get('to_id'),p_qty:Number(fd.get('qty')),p_notes:fd.get('notes')||null});if(error)throw error;closeModal();await renderPage('warehouses');toast('تم التحويل وتسجيل حركة المخزون');}break;
    case'authorForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const obj={name:String(fd.get('name')).trim(),share_percent:Number(fd.get('share_percent')||0),email:String(fd.get('email')||'').trim()||null,phone:String(fd.get('phone')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null,active:true};const aid=String(fd.get('id')||'');const r=aid?await sb.from('authors').update(obj).eq('id',aid):await sb.from('authors').insert(obj);if(r.error)throw r.error;closeModal();toast('تم حفظ بيانات المؤلف');await renderPage('authors');}break;
    case'partnerForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const {error}=await sb.from('consignment_partners').insert({name:String(fd.get('name')).trim(),partner_type:String(fd.get('partner_type')),phone:String(fd.get('phone')||'').trim()||null,email:String(fd.get('email')||'').trim()||null,address:String(fd.get('address')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null});if(error)throw error;closeModal();toast('تمت إضافة الجهة');await renderPage('consignment');}break;
