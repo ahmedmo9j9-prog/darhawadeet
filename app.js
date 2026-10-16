@@ -12,6 +12,7 @@ const NAV = [
   {id:'books', title:'الكتب والمخزون', icon:'▥', roles:['manager','warehouse','accountant']},
   {id:'warehouses', title:'المخازن والتحويلات', icon:'⇄', roles:['manager','warehouse']},
   {id:'exhibitions', title:'المعارض وكشف التعبئة', icon:'🎪', roles:['manager','warehouse']},
+  {id:'manga', title:'المانجا', icon:'📖', roles:['manager','cashier','warehouse','accountant']},
   {id:'authors', title:'المؤلفون', icon:'✎', roles:['manager','accountant']},
   {id:'consignment', title:'الأمانة والمكتبات', icon:'⇆', roles:['manager','accountant','warehouse']},
   {id:'printing', title:'الطباعة والطبعات', icon:'▧', roles:['manager','accountant','warehouse']},
@@ -203,6 +204,7 @@ async function renderPage(page,opts={}){
       case'invoices':await renderInvoices();break;
       case'warehouses':await renderWarehouses();break;
       case'exhibitions':await renderExhibitions();break;
+      case'manga':await renderManga();break;
       case'authors':await renderAuthors();break;
       case'consignment':await renderConsignment();break;
       case'printing':await renderPrinting();break;
@@ -459,6 +461,166 @@ function printHtmlDoc(html){
   setTimeout(()=>{try{f.contentWindow.focus();f.contentWindow.print();}catch(e){}setTimeout(()=>f.remove(),60000);},600);
 }
 function exStatus(w){const t=new Date().toISOString().slice(0,10);if(w.end_date&&w.end_date<t)return['انتهى','badge-warning'];if(w.start_date&&w.start_date<=t&&(!w.end_date||w.end_date>=t))return['جارٍ الآن','badge-ok'];if(w.start_date&&w.start_date>t)return['قادم',''];return['—',''];}
+/* ====== المانجا: مخزون وبيع منفصلان (جملة / قطعة) ====== */
+let mangaTab='stock';let msale=null;let mangaTitlesCache=[];
+const canEditManga=()=>['manager','warehouse'].includes(profile.role);
+const canSellManga=()=>['manager','cashier','warehouse'].includes(profile.role);
+async function mangaSettings(){const {data}=await sb.from('manga_settings').select('*').eq('id',1).maybeSingle();return data||{};}
+async function loadMangaTitles(){return fetchAllRows(()=>sb.from('manga_titles').select('*').eq('active',true).order('title').order('volume').order('id'));}
+function mangaHead(st,title){
+  const sub=[st.phone&&('هاتف: '+st.phone),st.address].filter(Boolean).join(' · ');
+  return `<div class="head"><div>${st.brand_name?`<div class="brand">${esc(st.brand_name)}</div>`:''}<h1>${esc(title)}</h1>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div></div>`;
+}
+const MANGA_CSS='@page{size:A4;margin:10mm}*{box-sizing:border-box}body{font:13px Tahoma,Arial,sans-serif;color:#111;margin:0}.head{border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:12px}.brand{font-size:22px;font-weight:700}.head h1{margin:4px 0 0;font-size:17px}.sub{font-size:12px;color:#444;margin-top:4px}.meta{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 20px;margin-bottom:12px;font-size:12px}table.items{width:100%;border-collapse:collapse}table.items th,table.items td{border:1px solid #444;padding:5px 6px;text-align:right;font-size:11.5px}table.items th{background:#f1f1f1}tr{page-break-inside:avoid}td.c,th.c{text-align:center}small{display:block;color:#555;font-size:10px}table.tot{margin-top:12px;margin-left:auto;margin-right:0;border-collapse:collapse;min-width:260px}table.tot td{border:1px solid #444;padding:6px 10px;font-size:13px}table.tot tr.net td{background:#f1f1f1;font-weight:700;font-size:14px}.cnt{margin-top:10px;font-size:12px}.foot{margin-top:14px;font-size:11px;line-height:1.9;border:1px dashed #666;padding:8px}.sign{display:flex;justify-content:space-between;margin-top:34px}.sign div{width:30%;border-top:1px solid #111;padding-top:6px;text-align:center}.cancel{color:#b00;font-weight:700;margin-bottom:8px}';
+async function printMangaInvoice(saleId){
+  const [sRes,iRes,st]=await Promise.all([sb.from('manga_sales').select('*').eq('id',saleId).single(),sb.from('manga_sale_items').select('*,t:manga_titles(title,volume,author_name)').eq('sale_id',saleId).order('id'),mangaSettings()]);
+  if(sRes.error)throw sRes.error;if(iRes.error)throw iRes.error;
+  const s=sRes.data,items=iRes.data||[];
+  const typeLbl=s.sale_type==='wholesale'?'بيع بالجملة':'بيع بالقطعة';
+  const copies=items.reduce((n,i)=>n+Number(i.qty),0);
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة ${esc(s.invoice_no)}</title><style>${MANGA_CSS}</style></head><body>${mangaHead(st,'فاتورة بيع')}${s.status==='cancelled'?'<div class="cancel">فاتورة ملغاة</div>':''}<div class="meta"><div>رقم الفاتورة: <b>${esc(s.invoice_no)}</b></div><div>التاريخ: ${esc(dateOnly(s.created_at))}</div><div>نوع البيع: <b>${typeLbl}</b></div><div>طريقة الدفع: ${esc(s.payment_method)}</div>${s.customer_name?`<div>العميل: <b>${esc(s.customer_name)}</b></div>`:''}${s.customer_phone?`<div>هاتف العميل: ${esc(s.customer_phone)}</div>`:''}${s.notes?`<div style="grid-column:1/-1">ملاحظات: ${esc(s.notes)}</div>`:''}</div><table class="items"><thead><tr><th class="c">م</th><th>العنوان</th><th class="c">الكمية</th><th class="c">سعر القطعة</th><th class="c">الإجمالي</th></tr></thead><tbody>${items.map((i,n)=>`<tr><td class="c">${n+1}</td><td><b>${esc(i.t?.title||'')}</b>${i.t?.volume?`<small>المجلد: ${esc(i.t.volume)}</small>`:''}</td><td class="c">${i.qty}</td><td class="c">${money(i.unit_price)}</td><td class="c">${money(i.line_total)}</td></tr>`).join('')}</tbody></table><table class="tot"><tr><td>الإجمالي</td><td>${money(s.subtotal)}</td></tr>${Number(s.discount)>0?`<tr><td>الخصم</td><td>${money(s.discount)}</td></tr>`:''}<tr class="net"><td>الصافي المستحق</td><td>${money(s.total)}</td></tr></table><div class="cnt">عدد العناوين: ${items.length} · عدد القطع: ${copies}</div>${st.footer?`<div class="foot">${esc(st.footer)}</div>`:''}<div class="sign"><div>المستلم</div><div>البائع</div></div></body></html>`;
+  printHtmlDoc(html);
+}
+async function printMangaStock(){
+  const [titles,st]=await Promise.all([loadMangaTitles(),mangaSettings()]);
+  const list=titles.filter(t=>Number(t.qty)>0);
+  if(!list.length){toast('لا توجد عناوين متاحة في المخزون',true);return;}
+  const pieces=list.reduce((n,t)=>n+Number(t.qty),0);
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف المخزون</title><style>${MANGA_CSS}</style></head><body>${mangaHead(st,'كشف المتاح من المخزون')}<div class="meta"><div>التاريخ: ${esc(new Date().toLocaleDateString('ar-EG'))}</div></div><table class="items"><thead><tr><th class="c">م</th><th>العنوان</th><th class="c">المجلد</th><th>المؤلف</th><th class="c">المتاح</th><th class="c">سعر القطعة</th><th class="c">سعر الجملة</th></tr></thead><tbody>${list.map((t,n)=>`<tr><td class="c">${n+1}</td><td><b>${esc(t.title)}</b></td><td class="c">${esc(t.volume||'')}</td><td>${esc(t.author_name||'')}</td><td class="c">${t.qty}</td><td class="c">${money(t.retail_price)}</td><td class="c">${money(t.wholesale_price)}</td></tr>`).join('')}</tbody></table><div class="cnt">عدد العناوين: ${list.length} · إجمالي القطع: ${pieces}</div>${st.footer?`<div class="foot">${esc(st.footer)}</div>`:''}</body></html>`;
+  printHtmlDoc(html);
+}
+async function renderManga(){
+  const tabs=[['stock','المخزون'],['sell','بيع'],['sales','المبيعات'],['settings','بيانات الفاتورة']].filter(t=>t[0]!=='sell'||canSellManga()).filter(t=>t[0]!=='settings'||profile.role==='manager');
+  if(!tabs.some(t=>t[0]===mangaTab))mangaTab='stock';
+  $('pageRoot').innerHTML=`<div class="toolbar">${tabs.map(t=>`<button class="btn ${t[0]===mangaTab?'btn-primary':''}" data-action="manga-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div><div id="mangaBody"><div class="loading-card">جارٍ التحميل…</div></div>`;
+  if(mangaTab==='stock')await renderMangaStock();else if(mangaTab==='sell')await renderMangaSell();else if(mangaTab==='sales')await renderMangaSales();else await renderMangaSettings();
+}
+async function renderMangaStock(){
+  const titles=await loadMangaTitles();mangaTitlesCache=titles;const ed=canEditManga();
+  const pieces=titles.reduce((n,t)=>n+Number(t.qty),0),costV=titles.reduce((n,t)=>n+Number(t.qty)*Number(t.cost_price),0),wholeV=titles.reduce((n,t)=>n+Number(t.qty)*Number(t.wholesale_price),0),retailV=titles.reduce((n,t)=>n+Number(t.qty)*Number(t.retail_price),0);
+  $('mangaBody').innerHTML=`<div class="stats-grid">${cardKpi('عدد العناوين',titles.length)}${cardKpi('إجمالي القطع',pieces)}${cardKpi('قيمة المخزون بسعر الجملة',money(wholeV))}${cardKpi('قيمة المخزون بسعر القطعة',money(retailV))}${ed?cardKpi('قيمة المخزون بالتكلفة',money(costV)):''}</div><div class="page-tools"><div><h3>مخزون المانجا</h3><p>مخزون منفصل تمامًا عن كتب الدار</p></div><div class="tool-actions">${ed?'<button class="btn btn-primary" data-action="manga-new">+ عنوان جديد</button><button class="btn" data-action="manga-import">استيراد Excel</button>':''}<button class="btn" data-action="manga-print-stock">🖨 كشف المتاح</button><button class="btn" data-action="manga-export">تصدير Excel</button></div></div><div class="toolbar"><input id="mangaSearch" placeholder="ابحث بالعنوان أو المؤلف أو الباركود"></div><section class="panel"><div id="mangaTable"></div></section>`;
+  const draw=()=>{
+    const q=($('mangaSearch').value||'').trim().toLowerCase();
+    const list=q?titles.filter(t=>[t.title,t.volume,t.author_name,t.publisher,t.barcode].some(v=>String(v||'').toLowerCase().includes(q))):titles;
+    $('mangaTable').innerHTML=table(['العنوان','المؤلف','سعر القطعة','سعر الجملة',...(ed?['التكلفة']:[]),'الكمية','إجراءات'],list.map(t=>{const low=Number(t.qty)<=Number(t.min_stock);return `<tr><td><b>${esc(t.title)}</b>${t.volume?`<span class="subline">المجلد: ${esc(t.volume)}</span>`:''}</td><td>${esc(t.author_name||'—')}</td><td>${money(t.retail_price)}</td><td>${money(t.wholesale_price)}</td>${ed?`<td>${money(t.cost_price)}</td>`:''}<td><span class="badge ${Number(t.qty)===0?'badge-danger':low?'badge-warning':'badge-ok'}">${t.qty}</span></td><td>${ed?`<div class="tool-actions"><button class="btn btn-sm" data-action="manga-edit" data-id="${t.id}">تعديل</button><button class="btn btn-sm" data-action="manga-delete" data-id="${t.id}" style="color:var(--bad);border-color:var(--bad)">🗑</button></div>`:''}</td></tr>`;}).join(''),'لا توجد عناوين. اضغط «عنوان جديد» لإضافة أول عنوان.');
+  };
+  $('mangaSearch').oninput=draw;draw();
+}
+function mangaTitleModal(t=null){
+  const b=t||{};
+  openModal(t?'تعديل عنوان مانجا':'إضافة عنوان مانجا',`<form id="mangaTitleForm" class="form-grid" novalidate><input type="hidden" name="rec_id" value="${esc(b.id||'')}">${modalFormField('اسم العنوان *','title',b.title||'')}${modalFormField('رقم المجلد / الجزء','volume',b.volume||'')}${modalFormField('المؤلف','author_name',b.author_name||'')}${modalFormField('الناشر','publisher',b.publisher||'')}${modalFormField('الباركود','barcode',b.barcode||'')}${modalFormField('الكمية بالمخزون','qty',b.qty??0,'number')}${modalFormField('سعر القطعة *','retail_price',b.retail_price??0,'number')}${modalFormField('سعر الجملة','wholesale_price',b.wholesale_price??0,'number')}${modalFormField('سعر التكلفة','cost_price',b.cost_price??0,'number')}${modalFormField('حد التنبيه للمخزون','min_stock',b.min_stock??0,'number')}<label class="full">ملاحظات<textarea name="notes" rows="2">${esc(b.notes||'')}</textarea></label><div class="form-actions full"><button type="submit" class="btn btn-primary">حفظ</button><button type="button" class="btn" data-action="close-modal">إلغاء</button></div><div class="message full"></div></form>`);
+}
+async function saveMangaTitle(form){
+  const fd=new FormData(form);const rid=String(fd.get('rec_id')||'');
+  const txt=k=>String(fd.get(k)||'').trim();
+  const num=(k,d=0)=>numValue(fd.get(k),d);const r2=n=>Math.round(n*100)/100;
+  for(const [k,l] of [['qty','الكمية'],['retail_price','سعر القطعة'],['wholesale_price','سعر الجملة'],['cost_price','التكلفة'],['min_stock','حد التنبيه']]){const r=txt(k);if(r&&!/[0-9٠-٩۰-۹]/.test(r))throw new Error(l+' يجب أن يكون رقمًا');}
+  if(!txt('title'))throw new Error('اسم العنوان مطلوب');
+  const rec={title:txt('title'),volume:txt('volume')||null,author_name:txt('author_name')||null,publisher:txt('publisher')||null,barcode:txt('barcode')||null,retail_price:Math.max(0,r2(num('retail_price'))),wholesale_price:Math.max(0,r2(num('wholesale_price'))),cost_price:Math.max(0,r2(num('cost_price'))),min_stock:Math.max(0,Math.trunc(num('min_stock'))),notes:txt('notes')||null,active:true};
+  const qty=Math.max(0,Math.trunc(num('qty')));
+  const res=rid?await sb.from('manga_titles').update(rec).eq('id',rid).select('*').single():await sb.from('manga_titles').insert(rec).select('*').single();
+  if(res.error){if(res.error.code==='23505')throw new Error('الباركود «'+rec.barcode+'» مستخدم بالفعل في عنوان آخر.');throw res.error;}
+  if(qty!==Number(res.data.qty)){const {error}=await sb.rpc('manga_set_stock',{p_title_id:res.data.id,p_qty:qty});if(error)throw new Error('تم حفظ العنوان، لكن لم يتم حفظ الكمية: '+errText(error));}
+  closeModal();toast(`تم حفظ «${rec.title}» · الكمية: ${qty}`);await renderPage('manga',{silent:true});
+}
+async function deleteMangaTitle(id){
+  const t=mangaTitlesCache.find(x=>x.id===id);
+  if(!confirm(`هل تريد حذف «${t?.title||'العنوان'}»؟\nلو كان له مبيعات سابقة سيتم إخفاؤه بدلًا من حذفه نهائيًا حفاظًا على الفواتير.`))return;
+  const d=await sb.from('manga_titles').delete().eq('id',id).select('id');
+  if(!d.error&&(d.data||[]).length)toast('تم حذف العنوان');
+  else if(d.error&&d.error.code==='23503'){const u=await sb.from('manga_titles').update({active:false,barcode:null}).eq('id',id).select('id');if(u.error)throw u.error;toast('تم حذف العنوان (أُخفي مع حفظ سجل مبيعاته)');}
+  else if(d.error)throw d.error;else throw new Error('لا تملك صلاحية الحذف');
+  await renderPage('manga',{silent:true});
+}
+function mangaImportModal(){
+  openModal('استيراد المانجا من Excel',`<p class="muted small">ارفع ملف XLSX أو XLS أو CSV. الأعمدة المقبولة: العنوان، المجلد، المؤلف، الناشر، الباركود، سعر القطعة، سعر الجملة، التكلفة، الكمية، حد التنبيه. يتم تحديث العنوان الموجود (بالباركود أو بالعنوان + المجلد) وإضافة الجديد.</p><form id="mangaImportForm" class="stack"><label>ملف Excel<input id="mangaFile" type="file" accept=".xlsx,.xls,.csv" required></label><div class="form-actions"><button class="btn btn-primary" type="submit">استيراد</button></div><div id="mangaImportMessage" class="message"></div></form>`);
+}
+async function importMangaExcel(form){
+  const file=$('mangaFile').files[0];if(!file)throw new Error('اختر ملف Excel أولًا');if(!window.XLSX)throw new Error('مكتبة Excel لم تُحمّل. حدّث الصفحة.');
+  const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});if(!rows.length)throw new Error('الملف لا يحتوي على صفوف.');
+  let ins=0,upd=0,failed=0;const errors=[];
+  for(let idx=0;idx<rows.length;idx++){
+    const r=rows[idx];const g=(a)=>pickValue(r,a);
+    const title=String(g(['العنوان','اسم العنوان','اسم المانجا','اسم الكتاب','title'])).trim();if(!title){failed++;errors.push(`صف ${idx+2}: العنوان فارغ`);continue;}
+    const volume=String(g(['المجلد','الجزء','رقم المجلد','volume'])).trim()||null;const barcode=String(g(['الباركود','Barcode','باركود'])).trim()||null;
+    const rec={title,volume,author_name:String(g(['المؤلف','اسم المؤلف','author'])).trim()||null,publisher:String(g(['الناشر','دار النشر','publisher'])).trim()||null,barcode,
+      retail_price:Math.max(0,numValue(g(['سعر القطعة','سعر التجزئة','سعر البيع','السعر','retail']),0)),wholesale_price:Math.max(0,numValue(g(['سعر الجملة','wholesale']),0)),cost_price:Math.max(0,numValue(g(['التكلفة','سعر التكلفة','cost']),0)),min_stock:Math.max(0,Math.trunc(numValue(g(['حد التنبيه','الحد الأدنى','min stock']),0))),active:true};
+    try{
+      let existing=null;
+      if(barcode){const x=await sb.from('manga_titles').select('id').eq('barcode',barcode).maybeSingle();if(x.error)throw x.error;existing=x.data;}
+      if(!existing){let q=sb.from('manga_titles').select('id').eq('title',title);q=volume?q.eq('volume',volume):q.is('volume',null);const x=await q.limit(1);if(x.error)throw x.error;existing=(x.data||[])[0]||null;}
+      let id;
+      if(existing){const x=await sb.from('manga_titles').update(rec).eq('id',existing.id).select('id').single();if(x.error)throw x.error;id=x.data.id;upd++;}
+      else{const x=await sb.from('manga_titles').insert(rec).select('id').single();if(x.error)throw x.error;id=x.data.id;ins++;}
+      const qc=g(['الكمية','الرصيد','المخزون','العدد','عدد النسخ','qty','stock']);
+      if(qc!==''){const x=await sb.rpc('manga_set_stock',{p_title_id:id,p_qty:Math.max(0,Math.trunc(numValue(qc,0)))});if(x.error)throw x.error;}
+    }catch(e){failed++;errors.push(`صف ${idx+2} (${title}): ${errText(e)}`);}
+  }
+  await renderPage('manga',{silent:true});
+  $('modalTitle').textContent='نتيجة الاستيراد';$('modalBody').innerHTML=`<div class="stats-grid compact">${cardKpi('عناوين جديدة',ins)}${cardKpi('عناوين محدثة',upd)}${cardKpi('صفوف لم تكتمل',failed)}</div><div class="message ${failed?'is-error':'is-success'}">${failed?'راجع الأخطاء ثم صحح الملف وأعد المحاولة.':'تم الاستيراد بدون أخطاء.'}</div>${errors.length?`<div class="error-list">${errors.slice(0,30).map(e=>`<div>${esc(e)}</div>`).join('')}</div>`:''}<div class="form-actions"><button class="btn btn-primary" data-action="close-modal">تم</button></div>`;
+}
+function exportManga(){
+  const ed=canEditManga();
+  exportXlsx('مخزون-المانجا.xlsx',mangaTitlesCache.map(t=>({'العنوان':t.title,'المجلد':t.volume||'','المؤلف':t.author_name||'','الناشر':t.publisher||'','الباركود':t.barcode||'','سعر القطعة':t.retail_price,'سعر الجملة':t.wholesale_price,...(ed?{'التكلفة':t.cost_price}:{}),'الكمية':t.qty,'حد التنبيه':t.min_stock,'ملاحظات':t.notes||''})));
+}
+/* ---- البيع ---- */
+const mgDefaultPrice=t=>Number(msale.type==='wholesale'?t.wholesale_price:t.retail_price);
+function drawMgResults(){
+  const q=($('mgSearch').value||'').trim().toLowerCase();const box=$('mgResults');
+  if(!q){box.innerHTML='<div class="small muted">اكتب اسم العنوان أو الباركود لإضافته (Enter يضيف أول نتيجة).</div>';return;}
+  const list=msale.titles.filter(t=>[t.title,t.volume,t.author_name,t.barcode].some(v=>String(v||'').toLowerCase().includes(q))).slice(0,8);
+  box.innerHTML=list.length?`<div class="return-items">${list.map(t=>{const added=msale.lines.has(t.id);return `<div class="return-item"><div><b>${esc(t.title)}${t.volume?' — مجلد '+esc(t.volume):''}</b><small>المتاح: ${t.qty} · السعر: ${money(mgDefaultPrice(t))}</small></div><button type="button" class="btn btn-sm" data-action="manga-add" data-id="${t.id}" ${added||Number(t.qty)<=0?'disabled':''}>${added?'مضاف':Number(t.qty)<=0?'نفد':'+ إضافة'}</button></div>`;}).join('')}</div>`:'<div class="small muted">لا توجد نتائج.</div>';
+}
+function drawMgLines(){
+  const arr=[...msale.lines.values()];const sub=arr.reduce((n,l)=>n+l.qty*l.price,0);
+  const disc=Math.min(sub,Math.max(0,numValue($('mgDisc')?.value,0)));
+  const inp='style="width:85px;padding:6px;border:1px solid var(--line);border-radius:8px"';
+  $('mgLines').innerHTML=(arr.length?table(['العنوان','المتاح','الكمية','سعر القطعة','الإجمالي',''],arr.map(l=>`<tr><td><b>${esc(l.t.title)}</b>${l.t.volume?`<small class="subline">مجلد ${esc(l.t.volume)}</small>`:''}</td><td class="${l.qty>l.t.qty?'bad':''}">${l.t.qty}</td><td><input type="text" inputmode="decimal" data-num value="${l.qty}" data-mg-qty="${l.t.id}" ${inp}></td><td><input type="text" inputmode="decimal" data-num value="${l.price}" data-mg-price="${l.t.id}" ${inp}></td><td>${money(l.qty*l.price)}</td><td><button type="button" class="delete-btn" data-action="manga-del" data-id="${l.t.id}">×</button></td></tr>`).join('')):'<div class="empty-box">لم تتم إضافة عناوين بعد</div>')+`<div class="total-chip" style="margin-top:10px">${arr.length} عنوان · ${arr.reduce((n,l)=>n+l.qty,0)} قطعة · الإجمالي: ${money(sub)}${disc?` · الخصم: ${money(disc)}`:''} · الصافي: <b>${money(sub-disc)}</b></div>`;
+}
+async function renderMangaSell(){
+  const titles=await loadMangaTitles();msale={titles,type:'retail',lines:new Map()};
+  $('mangaBody').innerHTML=`<section class="panel" id="mgSell"><div class="form-grid"><label>نوع البيع<select id="mgType"><option value="retail">بالقطعة</option><option value="wholesale">بالجملة</option></select></label><label>اسم العميل (اختياري)<input id="mgCust"></label><label>هاتف العميل (اختياري)<input id="mgPhone"></label><label>طريقة الدفع<select id="mgPay"><option value="نقدي">نقدي</option><option value="فيزا">فيزا</option><option value="آجل">آجل</option></select></label><label>خصم على الفاتورة (مبلغ)<input id="mgDisc" type="text" inputmode="decimal" data-num value="0"></label><label class="full">ابحث عن عنوان (الاسم / الباركود)<input id="mgSearch" autocomplete="off" placeholder="اكتب للبحث"></label></div><div id="mgResults" style="margin:8px 0"></div><div id="mgLines"></div><label style="display:block;margin-top:10px">ملاحظات<textarea id="mgNotes" rows="2" style="width:100%;margin-top:5px;border:1px solid var(--line);border-radius:9px;padding:9px"></textarea></label><div class="form-actions" style="margin-top:12px"><button class="btn btn-primary" id="mgCheckout" data-action="manga-checkout">إتمام البيع وطباعة الفاتورة</button></div></section>`;
+  const root=$('mgSell');
+  root.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
+    if(t.dataset.mgQty){const l=msale.lines.get(t.dataset.mgQty);if(l){l.qty=Math.max(1,Math.trunc(numValue(t.value,1)));drawMgLines();}}
+    else if(t.dataset.mgPrice){const l=msale.lines.get(t.dataset.mgPrice);if(l){l.price=Math.max(0,numValue(t.value,0));drawMgLines();}}});
+  $('mgSearch').oninput=drawMgResults;
+  $('mgSearch').onkeydown=e=>{if(e.key!=='Enter')return;e.preventDefault();const q=($('mgSearch').value||'').trim().toLowerCase();if(!q)return;
+    const exact=msale.titles.find(t=>String(t.barcode||'').toLowerCase()===q);
+    const first=exact||msale.titles.filter(t=>[t.title,t.volume,t.author_name,t.barcode].some(v=>String(v||'').toLowerCase().includes(q)))[0];
+    if(first&&Number(first.qty)>0&&!msale.lines.has(first.id)){msale.lines.set(first.id,{t:first,qty:1,price:mgDefaultPrice(first)});$('mgSearch').value='';drawMgResults();drawMgLines();}};
+  $('mgType').onchange=e=>{msale.type=e.target.value;msale.lines.forEach(l=>{l.price=mgDefaultPrice(l.t);});drawMgResults();drawMgLines();};
+  $('mgDisc').oninput=drawMgLines;
+  drawMgResults();drawMgLines();
+}
+async function mangaCheckout(){
+  const arr=[...msale.lines.values()];if(!arr.length)throw new Error('أضف عناوين أولًا');
+  const over=arr.filter(l=>l.qty>l.t.qty);if(over.length)throw new Error('الكمية أكبر من المتاح: '+over.map(l=>l.t.title).join('، '));
+  const sub=arr.reduce((n,l)=>n+l.qty*l.price,0);const disc=Math.min(sub,Math.max(0,numValue($('mgDisc').value,0)));
+  if(!confirm(`إتمام ${msale.type==='wholesale'?'بيع بالجملة':'بيع بالقطعة'} — ${arr.length} عنوان، الصافي ${money(sub-disc)}؟`))return;
+  const btn=$('mgCheckout');btn.disabled=true;
+  try{
+    const {data,error}=await sb.rpc('create_manga_sale',{p_sale_type:msale.type,p_customer_name:$('mgCust').value.trim()||null,p_customer_phone:$('mgPhone').value.trim()||null,p_payment_method:$('mgPay').value,p_discount:disc,p_items:arr.map(l=>({title_id:l.t.id,qty:l.qty,unit_price:l.price})),p_notes:$('mgNotes').value.trim()||null});
+    if(error)throw error;
+    toast('تم تسجيل البيع');
+    await printMangaInvoice(data);
+    await renderPage('manga',{silent:true});
+  }finally{const b=$('mgCheckout');if(b)b.disabled=false;}
+}
+async function renderMangaSales(){
+  const all=await fetchAllRows(()=>sb.from('manga_sales').select('id,invoice_no,sale_type,customer_name,payment_method,total,status,created_at').order('created_at',{ascending:false}).order('id',{ascending:false}));
+  const done=all.filter(x=>x.status==='completed');const sum=t=>done.filter(x=>t?x.sale_type===t:true).reduce((n,x)=>n+Number(x.total),0);
+  $('mangaBody').innerHTML=`<div class="stats-grid compact">${cardKpi('مبيعات الجملة',money(sum('wholesale')))}${cardKpi('مبيعات القطعة',money(sum('retail')))}${cardKpi('إجمالي المبيعات',money(sum()),done.length+' فاتورة')}</div><section class="panel">${table(['رقم الفاتورة','التاريخ','النوع','العميل','الدفع','الإجمالي','الحالة','إجراءات'],all.slice(0,200).map(x=>`<tr><td>${esc(x.invoice_no)}</td><td>${esc(dateTime(x.created_at))}</td><td>${x.sale_type==='wholesale'?'جملة':'قطعة'}</td><td>${esc(x.customer_name||'—')}</td><td>${esc(x.payment_method)}</td><td>${money(x.total)}</td><td><span class="badge ${x.status==='completed'?'badge-ok':'badge-danger'}">${x.status==='completed'?'مكتملة':'ملغاة'}</span></td><td><div class="tool-actions"><button class="btn btn-sm" data-action="manga-print-sale" data-id="${x.id}">🖨 فاتورة</button>${profile.role==='manager'&&x.status==='completed'?`<button class="btn btn-sm" data-action="manga-cancel-sale" data-id="${x.id}" style="color:var(--bad);border-color:var(--bad)">إلغاء</button>`:''}</div></td></tr>`).join(''),'لا توجد مبيعات بعد')}</section>`;
+}
+async function renderMangaSettings(){
+  const st=await mangaSettings();
+  $('mangaBody').innerHTML=`<section class="panel"><div class="panel-head"><h3>بيانات فواتير وكشوف المانجا</h3></div><p class="small muted">البيانات دي هي اللي بتظهر أعلى فواتير وكشوف المانجا بدل اسم دار حواديت. لو سبتها فاضية بتتطبع الفاتورة من غير أي اسم.</p><form id="mangaSettingsForm" class="form-grid">${modalFormField('الاسم على الفاتورة','brand_name',st.brand_name||'')}${modalFormField('الهاتف','phone',st.phone||'')}${modalFormField('العنوان','address',st.address||'')}<label class="full">ملاحظة أسفل الفاتورة والكشف<textarea name="footer" rows="2">${esc(st.footer||'')}</textarea></label><div class="form-actions full"><button type="submit" class="btn btn-primary">حفظ</button></div><div class="message full"></div></form></section>`;
+}
+async function saveMangaSettings(form){
+  const fd=new FormData(form);const t=k=>String(fd.get(k)||'').trim()||null;
+  const {error}=await sb.from('manga_settings').upsert({id:1,brand_name:t('brand_name'),phone:t('phone'),address:t('address'),footer:t('footer'),updated_at:new Date().toISOString()});
+  if(error)throw error;toast('تم حفظ بيانات الفاتورة');await renderPage('manga',{silent:true});
+}
 async function deleteExhibition(exId){
   const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
   const inv=await fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',exId).gt('qty',0).order('book_id'));
@@ -811,6 +973,18 @@ async function handlePageClick(e){
    case 'new-exhibition':exhibitionModal();break;
    case 'edit-exhibition':{const {data,error}=await sb.from('warehouses').select('*').eq('id',id).single();if(error)throw error;exhibitionModal(data);}break;
    case 'pack-exhibition':await openPackModal(id);break;
+   case 'manga-tab':mangaTab=id;await renderPage('manga',{silent:true});break;
+   case 'manga-new':mangaTitleModal();break;
+   case 'manga-edit':mangaTitleModal(mangaTitlesCache.find(x=>x.id===id));break;
+   case 'manga-delete':await deleteMangaTitle(id);break;
+   case 'manga-import':mangaImportModal();break;
+   case 'manga-print-stock':await printMangaStock();break;
+   case 'manga-export':exportManga();break;
+   case 'manga-add':{const t=msale.titles.find(x=>x.id===id);if(t&&!msale.lines.has(id)){msale.lines.set(id,{t,qty:1,price:mgDefaultPrice(t)});drawMgResults();drawMgLines();}}break;
+   case 'manga-del':msale.lines.delete(id);drawMgResults();drawMgLines();break;
+   case 'manga-checkout':await mangaCheckout();break;
+   case 'manga-print-sale':await printMangaInvoice(id);break;
+   case 'manga-cancel-sale':if(confirm('إلغاء الفاتورة وإرجاع الكميات للمخزون؟')){const {error}=await sb.rpc('cancel_manga_sale',{p_sale_id:id});if(error)throw error;toast('تم إلغاء الفاتورة');await renderPage('manga',{silent:true});}break;
    case 'report-pdf':await printFinancialReport();break;
    case 'print-partner-sale':await printPartnerSaleInvoice(id);break;
    case 'print-shipment':await printConsignmentInvoice(id);break;
@@ -839,6 +1013,9 @@ async function handlePageSubmit(e){
    case'warehouseForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const {error}=await sb.from('warehouses').insert({name:String(fd.get('name')).trim(),warehouse_type:String(fd.get('warehouse_type')),location:String(fd.get('location')||'').trim()||null});if(error)throw error;closeModal();await loadWarehouses();await renderPage('warehouses');toast('تم إضافة المخزن');}break;
    case'exhibitionForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const row={name:String(fd.get('name')).trim(),warehouse_type:'exhibition',location:String(fd.get('location')||'').trim()||null,start_date:fd.get('start_date')||null,end_date:fd.get('end_date')||null};if(row.start_date&&row.end_date&&row.end_date<row.start_date)throw new Error('تاريخ النهاية قبل تاريخ البداية');const eid=String(fd.get('rec_id')||'');const {error}=eid?await sb.from('warehouses').update(row).eq('id',eid):await sb.from('warehouses').insert(row);if(error)throw error;closeModal();await loadWarehouses();await renderPage('exhibitions');toast(eid?'تم تحديث المعرض':'تمت إضافة المعرض');}break;
    case'settleMultiForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const ids=String(fd.get('item_ids')).split(',').filter(Boolean);for(const iid of ids){const {error}=await sb.rpc('settle_consignment_item',{p_item_id:Number(iid),p_sold_qty:Number(fd.get('sold_'+iid)||0),p_returned_qty:Number(fd.get('ret_'+iid)||0)});if(error)throw error;}closeModal();await renderPage('consignment');toast('تم حفظ التسوية');}break;
+   case'mangaTitleForm':e.preventDefault();setBusy(form,true);await saveMangaTitle(form);break;
+   case'mangaSettingsForm':e.preventDefault();setBusy(form,true);await saveMangaSettings(form);break;
+   case'mangaImportForm':e.preventDefault();setBusy(form,true);$('mangaImportMessage').textContent='جارٍ الاستيراد…';await importMangaExcel(form);break;
    case'transferForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const {error}=await sb.rpc('transfer_inventory',{p_book_id:fd.get('book_id'),p_from_warehouse_id:fd.get('from_id'),p_to_warehouse_id:fd.get('to_id'),p_qty:Number(fd.get('qty')),p_notes:fd.get('notes')||null});if(error)throw error;closeModal();await renderPage('warehouses');toast('تم التحويل وتسجيل حركة المخزون');}break;
    case'authorForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const obj={name:String(fd.get('name')).trim(),share_percent:Number(fd.get('share_percent')||0),email:String(fd.get('email')||'').trim()||null,phone:String(fd.get('phone')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null,active:true};const aid=String(fd.get('rec_id')||'');const r=aid?await sb.from('authors').update(obj).eq('id',aid):await sb.from('authors').insert(obj);if(r.error)throw r.error;closeModal();toast('تم حفظ بيانات المؤلف');await renderPage('authors');}break;
    case'partnerForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const {error}=await sb.from('consignment_partners').insert({name:String(fd.get('name')).trim(),partner_type:String(fd.get('partner_type')),phone:String(fd.get('phone')||'').trim()||null,email:String(fd.get('email')||'').trim()||null,address:String(fd.get('address')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null});if(error)throw error;closeModal();toast('تمت إضافة الجهة');await renderPage('consignment');}break;
@@ -883,5 +1060,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r6';
+const APP_BUILD='2026-10-16-r7';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
