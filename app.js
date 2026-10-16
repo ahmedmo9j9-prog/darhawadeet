@@ -456,7 +456,7 @@ async function saveReturn(form){
 async function exportInvoices(){const {data,error}=await sb.from('invoices').select('invoice_no,created_at,subtotal,discount,total,payment_method,status').order('created_at',{ascending:false});if(error)throw error;exportXlsx('دار-حواديت-المبيعات.xlsx',(data||[]).map(x=>({'رقم الفاتورة':x.invoice_no,'التاريخ':dateTime(x.created_at),'الإجمالي قبل الخصم':x.subtotal,'الخصم':x.discount,'الإجمالي':x.total,'الدفع':x.payment_method,'الحالة':x.status})));}
 
 /* ====== المعارض وكشف التعبئة ====== */
-async function fetchAllRows(build){const out=[];for(let from=0;;from+=1000){const {data,error}=await build().range(from,from+999);if(error)throw error;out.push(...(data||[]));if(!data||data.length<1000)break;}return out;}
+async function fetchAllRows(build){const out=[];for(let from=0;;){const {data,error}=await build().range(from,from+999);if(error)throw error;if(!data||!data.length)break;out.push(...data);from+=data.length;}return out;}
 function printHtmlDoc(html){
   const f=document.createElement('iframe');f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';document.body.appendChild(f);
   const d=f.contentWindow.document;d.open();d.write(html);d.close();
@@ -1064,5 +1064,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r8';
+const APP_BUILD='2026-10-16-r9';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
