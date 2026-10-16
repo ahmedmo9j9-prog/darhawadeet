@@ -311,12 +311,12 @@ function filterBookTable(books){
   $('booksTable').innerHTML=booksTable(list);$('bookCount').textContent=`${list.length} كتاب`;updateBookSelectionUI();
 }
 function bookForm(book=null,stock=0){
-  const b=book||{};return `<form id="bookForm" class="form-grid"><input type="hidden" name="rec_id" value="${esc(b.id||'')}">
+  const b=book||{};return `<form id="bookForm" class="form-grid" novalidate><input type="hidden" name="rec_id" value="${esc(b.id||'')}">
   ${modalFormField('عنوان الكتاب *','title',b.title||'','text','required')}${modalFormField('المؤلف','author_name',b.author_name||'')}${modalFormField('ISBN','isbn',b.isbn||'')}
   ${modalFormField('Barcode','barcode',b.barcode||'')}${modalFormField('سعر البيع بالجنيه *','sale_price',b.sale_price??0,'number','required min="0" step="0.01"')}${modalFormField('سعر التكلفة بالجنيه','cost_price',b.cost_price??0,'number','min="0" step="0.01"')}
   ${modalFormField('الطبعة','edition',b.edition||'')}${modalFormField('عدد الصفحات','pages',b.pages||'','number','min="0"')}${modalFormField('نوع الغلاف','cover_type',b.cover_type||'')}
   ${modalFormField('دار النشر','publisher',b.publisher||'دار حواديت')}${modalFormField('التصنيف','category',b.category||'')}${modalFormField('حد التنبيه للمخزون','min_stock',b.min_stock??0,'number','min="0"')}
-  ${modalFormField('رابط صورة الغلاف (اختياري)','cover_url',b.cover_url||'','url','class="full"')}${modalFormField('الرصيد في '+(activeWarehouse?.name||'المخزن الحالي'),'stock_qty',stock,'number','min="0" required')}
+  ${modalFormField('رابط صورة الغلاف (اختياري)','cover_url',b.cover_url||'','text','class="full"')}${modalFormField('الرصيد في '+(activeWarehouse?.name||'المخزن الحالي'),'stock_qty',stock,'number','min="0" required')}
   <label class="full">ملاحظات<textarea name="notes" rows="2">${esc(b.notes||'')}</textarea></label>
   <div class="form-actions full"><button type="submit" class="btn btn-primary">حفظ بيانات الكتاب</button><button type="button" class="btn" data-action="close-modal">إلغاء</button></div><div id="bookFormMessage" class="message full"></div></form>`;
 }
@@ -326,14 +326,29 @@ async function openBookEditor(id=null){
 }
 async function saveBookFromForm(form){
   const fd=new FormData(form);const id=String(fd.get('rec_id')||'');
-  const book={title:String(fd.get('title')||'').trim(),author_name:String(fd.get('author_name')||'').trim()||null,isbn:String(fd.get('isbn')||'').trim()||null,barcode:String(fd.get('barcode')||'').trim()||null,
-    sale_price:Number(fd.get('sale_price')||0),cost_price:Number(fd.get('cost_price')||0),edition:String(fd.get('edition')||'').trim()||null,pages:fd.get('pages')?Number(fd.get('pages')):null,
-    cover_type:String(fd.get('cover_type')||'').trim()||null,publisher:String(fd.get('publisher')||'دار حواديت').trim(),category:String(fd.get('category')||'').trim()||null,min_stock:Number(fd.get('min_stock')||0),cover_url:String(fd.get('cover_url')||'').trim()||null,notes:String(fd.get('notes')||'').trim()||null,active:true};
-  if(!book.title)throw new Error('عنوان الكتاب مطلوب');
-  let q;
-  if(id){const {data,error}=await sb.from('books').update(book).eq('id',id).select('*').single();if(error)throw error;q=data;}
-  else {const {data,error}=await sb.from('books').insert(book).select('*').single();if(error)throw error;q=data;}
-  const {error:stockError}=await sb.rpc('set_inventory',{p_book_id:q.id,p_warehouse_id:activeWarehouse.id,p_qty:Number(fd.get('stock_qty')||0)});if(stockError)throw new Error('تم حفظ بيانات الكتاب، لكن لم يتم حفظ الرصيد: '+stockError.message);
+  const txt=k=>String(fd.get(k)||'').trim();
+  const num=(k,d=0)=>{const n=numValue(fd.get(k),d);return Number.isFinite(n)?n:d;};
+  const r2=n=>Math.round(n*100)/100;
+  const title=txt('title');if(!title)throw new Error('عنوان الكتاب مطلوب');
+  const sale=num('sale_price',0),cost=num('cost_price',0);
+  if(sale<0||cost<0)throw new Error('السعر لا يمكن أن يكون سالبًا');
+  const pagesRaw=txt('pages');
+  const book={title,author_name:txt('author_name')||null,isbn:txt('isbn')||null,barcode:txt('barcode')||null,sale_price:r2(sale),cost_price:r2(cost),edition:txt('edition')||null,pages:pagesRaw?Math.max(0,Math.round(numValue(pagesRaw,0))):null,cover_type:txt('cover_type')||null,publisher:txt('publisher')||'دار حواديت',category:txt('category')||null,min_stock:Math.max(0,Math.trunc(num('min_stock',0))),cover_url:txt('cover_url')||null,notes:txt('notes')||null,active:true};
+  const qty=Math.max(0,Math.trunc(num('stock_qty',0)));
+  const res=id?await sb.from('books').update(book).eq('id',id).select('*').single():await sb.from('books').insert(book).select('*').single();
+  if(res.error){
+    if(res.error.code==='23505'){
+      for(const [col,label] of [['isbn','ISBN'],['barcode','الباركود']]){
+        if(!book[col])continue;
+        let qq=sb.from('books').select('title').eq(col,book[col]);if(id)qq=qq.neq('id',id);
+        const {data:dup}=await qq.limit(1);
+        if(dup&&dup.length)throw new Error(`${label} «${book[col]}» مستخدم بالفعل في كتاب آخر: «${dup[0].title}». غيّره أو امسحه ثم احفظ.`);
+      }
+    }
+    throw res.error;
+  }
+  const q=res.data;
+  const {error:stockError}=await sb.rpc('set_inventory',{p_book_id:q.id,p_warehouse_id:activeWarehouse.id,p_qty:qty});if(stockError)throw new Error('تم حفظ بيانات الكتاب، لكن لم يتم حفظ الرصيد: '+stockError.message);
   closeModal();toast('تم حفظ بيانات الكتاب والمخزون');await renderPage('books');
 }
 function openImportExcel(){
@@ -834,7 +849,7 @@ async function handlePageSubmit(e){
    case'resetUserPasswordForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);if(fd.get('password')!==fd.get('confirm'))throw new Error('كلمتا المرور غير متطابقتين');const {data,error}=await sb.functions.invoke('admin-create-user',{body:{action:'set_password',user_id:fd.get('user_id'),password:fd.get('password')}});if(error)throw error;if(data?.error)throw new Error(data.error);closeModal();toast('تم تغيير كلمة مرور الحساب');}break;
    case'returnForm':e.preventDefault();setBusy(form,true);await saveReturn(form);break;
   }
- }catch(err){const message=errText(err);const target=form.querySelector('.message');if(target){target.textContent=message;target.className='message is-error';}else toast(message,true);}finally{if(form.isConnected)setBusy(form,false);}
+ }catch(err){const message=errText(err);const target=form.querySelector('.message');toast(message,true);if(target){target.textContent=message;target.className='message is-error';try{target.scrollIntoView({behavior:'smooth',block:'center'});}catch{}}}finally{if(form.isConnected)setBusy(form,false);}
 }
 function handlePageInput(e){/* delegated input handling reserved for accessible live filters */}
 function handlePageChange(e){/* all select changes are handled by their owning page */}
