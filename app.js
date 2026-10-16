@@ -442,14 +442,32 @@ function printHtmlDoc(html){
   setTimeout(()=>{try{f.contentWindow.focus();f.contentWindow.print();}catch(e){}setTimeout(()=>f.remove(),60000);},600);
 }
 function exStatus(w){const t=new Date().toISOString().slice(0,10);if(w.end_date&&w.end_date<t)return['انتهى','badge-warning'];if(w.start_date&&w.start_date<=t&&(!w.end_date||w.end_date>=t))return['جارٍ الآن','badge-ok'];if(w.start_date&&w.start_date>t)return['قادم',''];return['—',''];}
+async function deleteExhibition(exId){
+  const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
+  const inv=await fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',exId).gt('qty',0).order('book_id'));
+  const left=inv.reduce((s,r)=>s+Number(r.qty),0);
+  if(left>0){toast(`في مخزن المعرض ${left} نسخة. أرجعها للمخزن أولًا من زرار «↩ مرتجع» ثم احذف المعرض.`,true);return;}
+  if(!confirm(`هل تريد حذف المعرض «${ex.name}»؟\nلو كان له حركات سابقة (تعبئة أو مرتجع أو مبيعات) سيتم إخفاؤه من القائمة بدلًا من حذفه نهائيًا، حفاظًا على سجل الحركات.`))return;
+  const d=await sb.from('warehouses').delete().eq('id',exId).select('id');
+  if(!d.error&&(d.data||[]).length){toast('تم حذف المعرض');}
+  else if(d.error&&d.error.code==='23503'){
+    const stamp=new Date().toISOString().slice(0,10);
+    const u=await sb.from('warehouses').update({active:false,name:`${ex.name} (محذوف ${stamp} ${String(exId).slice(0,4)})`}).eq('id',exId).select('id');
+    if(u.error)throw u.error;
+    if(!(u.data||[]).length)throw new Error('لا تملك صلاحية حذف المعرض');
+    toast('تم حذف المعرض، وأُخفي من القائمة مع حفظ سجل حركاته');
+  }else if(d.error)throw d.error;
+  else throw new Error('لا تملك صلاحية حذف المعرض');
+  await loadWarehouses();await renderPage('exhibitions');
+}
 async function renderExhibitions(){
-  const {data:all,error}=await sb.from('warehouses').select('*').eq('warehouse_type','exhibition').order('start_date',{ascending:false,nullsFirst:false});
+  const {data:all,error}=await sb.from('warehouses').select('*').eq('warehouse_type','exhibition').eq('active',true).order('start_date',{ascending:false,nullsFirst:false});
   if(error)throw error;
   const ids=(all||[]).map(w=>w.id);
   const inv=ids.length?await fetchAllRows(()=>sb.from('inventory').select('warehouse_id,book_id,qty').in('warehouse_id',ids).gt('qty',0).order('book_id')):[];
   const copies=new Map(),titles=new Map();
   inv.forEach(r=>{copies.set(r.warehouse_id,(copies.get(r.warehouse_id)||0)+Number(r.qty));titles.set(r.warehouse_id,(titles.get(r.warehouse_id)||0)+1);});
-  $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>المعارض وكشف التعبئة</h3><p>سجّل المعارض التي تشارك فيها، وجهّز كشف تعبئة بعناوين الكتب والكميات</p></div><div class="tool-actions"><button class="btn btn-primary" data-action="new-exhibition">+ معرض جديد</button></div></div><section class="panel">${table(['المعرض','المكان','من','إلى','العناوين','النسخ','الحالة','إجراءات'],(all||[]).map(w=>{const st=exStatus(w);return `<tr><td><b>${esc(w.name)}</b></td><td>${esc(w.location||'—')}</td><td>${esc(w.start_date||'—')}</td><td>${esc(w.end_date||'—')}</td><td>${titles.get(w.id)||0}</td><td>${copies.get(w.id)||0}</td><td><span class="badge ${st[1]}">${st[0]}</span></td><td><div class="tool-actions"><button class="btn btn-sm btn-primary" data-action="pack-exhibition" data-id="${w.id}">📦 تعبئة</button><button class="btn btn-sm" data-action="return-exhibition" data-id="${w.id}">↩ مرتجع</button><button class="btn btn-sm" data-action="print-exhibition" data-id="${w.id}">🖨 كشف التعبئة</button><button class="btn btn-sm" data-action="edit-exhibition" data-id="${w.id}">تعديل</button></div></td></tr>`;}).join(''),'لا توجد معارض بعد. اضغط «معرض جديد» لإضافة أول معرض.')}</section><div class="info-strip">«تعبئة» تنقل الكتب من مخزن الدار إلى مخزن المعرض وتطبع الكشف. «مرتجع» يرجّع الباقي من المعرض إلى المخزن ويطبع كشف المرتجع. «كشف التعبئة» يطبع الكتب الموجودة حاليًا في مخزن المعرض.</div>`;
+  $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>المعارض وكشف التعبئة</h3><p>سجّل المعارض التي تشارك فيها، وجهّز كشف تعبئة بعناوين الكتب والكميات</p></div><div class="tool-actions"><button class="btn btn-primary" data-action="new-exhibition">+ معرض جديد</button></div></div><section class="panel">${table(['المعرض','المكان','من','إلى','العناوين','النسخ','الحالة','إجراءات'],(all||[]).map(w=>{const st=exStatus(w);return `<tr><td><b>${esc(w.name)}</b></td><td>${esc(w.location||'—')}</td><td>${esc(w.start_date||'—')}</td><td>${esc(w.end_date||'—')}</td><td>${titles.get(w.id)||0}</td><td>${copies.get(w.id)||0}</td><td><span class="badge ${st[1]}">${st[0]}</span></td><td><div class="tool-actions"><button class="btn btn-sm btn-primary" data-action="pack-exhibition" data-id="${w.id}">📦 تعبئة</button><button class="btn btn-sm" data-action="return-exhibition" data-id="${w.id}">↩ مرتجع</button><button class="btn btn-sm" data-action="print-exhibition" data-id="${w.id}">🖨 كشف التعبئة</button><button class="btn btn-sm" data-action="edit-exhibition" data-id="${w.id}">تعديل</button><button class="btn btn-sm" data-action="delete-exhibition" data-id="${w.id}" style="color:var(--bad);border-color:var(--bad)">🗑 حذف</button></div></td></tr>`;}).join(''),'لا توجد معارض بعد. اضغط «معرض جديد» لإضافة أول معرض.')}</section><div class="info-strip">«تعبئة» تنقل الكتب من مخزن الدار إلى مخزن المعرض وتطبع الكشف. «مرتجع» يرجّع الباقي من المعرض إلى المخزن ويطبع كشف المرتجع. «كشف التعبئة» يطبع الكتب الموجودة حاليًا في مخزن المعرض.</div>`;
 }
 function exhibitionModal(w=null){
   openModal(w?'تعديل معرض':'إضافة معرض',`<form id="exhibitionForm" class="form-grid"><input type="hidden" name="rec_id" value="${esc(w?.id||'')}">${modalFormField('اسم المعرض *','name',w?.name||'','text','required')}${modalFormField('المكان','location',w?.location||'')}${modalFormField('من تاريخ','start_date',w?.start_date||'','date')}${modalFormField('إلى تاريخ','end_date',w?.end_date||'','date')}<div class="form-actions full"><button class="btn btn-primary">حفظ</button></div></form>`);
@@ -779,6 +797,7 @@ async function handlePageClick(e){
    case 'report-pdf':await printFinancialReport();break;
    case 'print-partner-sale':await printPartnerSaleInvoice(id);break;
    case 'print-shipment':await printConsignmentInvoice(id);break;
+   case 'delete-exhibition':await deleteExhibition(id);break;
    case 'return-exhibition':await openExhibitionReturnModal(id);break;
    case 'print-exhibition':await printExhibitionStock(id);break;
    case 'new-warehouse':newWarehouseModal();break;case 'transfer-stock':await transferStockModal();break;
