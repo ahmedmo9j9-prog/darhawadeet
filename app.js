@@ -293,7 +293,7 @@ async function renderBooks(){
   const prevQ=$('bookSearch')?.value||'',prevF=$('bookStockFilter')?.value||'all';
   const books=await getBooksAndInventory();
   const existing=new Set(books.map(b=>b.id));selectedBookIds=new Set([...selectedBookIds].filter(id=>existing.has(id)));shownBooks=books;
-  const controls=canEditBooks()?`<button class="btn btn-primary" data-action="new-book">+ إضافة كتاب</button><button class="btn" data-action="import-excel">استيراد Excel</button><button class="btn" data-action="export-books">تصدير Excel</button><button class="btn" id="deleteSelectedBooks" data-action="delete-selected-books" style="display:none;color:var(--bad);border-color:var(--bad)">🗑 حذف المحدد (<span id="selCount">0</span>)</button>`:'';
+  const controls=canEditBooks()?`<button class="btn btn-primary" data-action="new-book">+ إضافة كتاب</button><button class="btn" data-action="import-excel">استيراد Excel</button><button class="btn" data-action="export-books">تصدير Excel</button><button class="btn" data-action="count-sheet">📋 كشف جرد يدوي</button><button class="btn" id="deleteSelectedBooks" data-action="delete-selected-books" style="display:none;color:var(--bad);border-color:var(--bad)">🗑 حذف المحدد (<span id="selCount">0</span>)</button>`:'';
   $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>كتالوج الكتب والمخزون</h3><p>تعديل كل بيانات الكتاب ورصيد كل مخزن بشكل مستقل</p></div><div class="tool-actions">${controls}</div></div>
     <div class="panel"><div class="toolbar"><input id="bookSearch" placeholder="بحث بالعنوان أو المؤلف أو ISBN أو Barcode"><select id="bookStockFilter"><option value="all">كل الأرصدة</option><option value="low">تحت حد التنبيه</option><option value="zero">نفد المخزون</option></select><span id="bookCount" class="muted">${books.length} كتاب</span></div><div id="booksTable">${booksTable(books)}</div></div>`;
   $('bookSearch').oninput=()=>filterBookTable(books);$('bookStockFilter').onchange=()=>filterBookTable(books);
@@ -500,7 +500,7 @@ async function renderManga(){
 async function renderMangaStock(){
   const titles=await loadMangaTitles();mangaTitlesCache=titles;const ed=canEditManga();
   const pieces=titles.reduce((n,t)=>n+Number(t.qty),0),costV=titles.reduce((n,t)=>n+Number(t.qty)*Number(t.cost_price),0),wholeV=titles.reduce((n,t)=>n+Number(t.qty)*Number(t.wholesale_price),0),retailV=titles.reduce((n,t)=>n+Number(t.qty)*Number(t.retail_price),0);
-  $('mangaBody').innerHTML=`<div class="stats-grid">${cardKpi('عدد العناوين',titles.length)}${cardKpi('إجمالي القطع',pieces)}${cardKpi('قيمة المخزون بسعر الجملة',money(wholeV))}${cardKpi('قيمة المخزون بسعر القطعة',money(retailV))}${ed?cardKpi('قيمة المخزون بالتكلفة',money(costV)):''}</div><div class="page-tools"><div><h3>مخزون المانجا</h3><p>مخزون منفصل تمامًا عن كتب الدار</p></div><div class="tool-actions">${ed?'<button class="btn btn-primary" data-action="manga-new">+ عنوان جديد</button><button class="btn" data-action="manga-import">استيراد Excel</button>':''}<button class="btn" data-action="manga-print-stock">🖨 كشف المتاح</button><button class="btn" data-action="manga-export">تصدير Excel</button></div></div><div class="toolbar"><input id="mangaSearch" placeholder="ابحث بالعنوان أو المؤلف أو الباركود"></div><section class="panel"><div id="mangaTable"></div></section>`;
+  $('mangaBody').innerHTML=`<div class="stats-grid">${cardKpi('عدد العناوين',titles.length)}${cardKpi('إجمالي القطع',pieces)}${cardKpi('قيمة المخزون بسعر الجملة',money(wholeV))}${cardKpi('قيمة المخزون بسعر القطعة',money(retailV))}${ed?cardKpi('قيمة المخزون بالتكلفة',money(costV)):''}</div><div class="page-tools"><div><h3>مخزون المانجا</h3><p>مخزون منفصل تمامًا عن كتب الدار</p></div><div class="tool-actions">${ed?'<button class="btn btn-primary" data-action="manga-new">+ عنوان جديد</button><button class="btn" data-action="manga-import">استيراد Excel</button>':''}<button class="btn" data-action="manga-print-stock">🖨 كشف المتاح</button><button class="btn" data-action="manga-count-sheet">📋 كشف جرد يدوي</button><button class="btn" data-action="manga-export">تصدير Excel</button></div></div><div class="toolbar"><input id="mangaSearch" placeholder="ابحث بالعنوان أو المؤلف أو الباركود"></div><section class="panel"><div id="mangaTable"></div></section>`;
   const draw=()=>{
     const q=($('mangaSearch').value||'').trim().toLowerCase();
     const list=q?titles.filter(t=>[t.title,t.volume,t.author_name,t.publisher,t.barcode].some(v=>String(v||'').toLowerCase().includes(q))):titles;
@@ -622,6 +622,37 @@ async function saveMangaSettings(form){
   const fd=new FormData(form);const t=k=>String(fd.get(k)||'').trim()||null;
   const {error}=await sb.from('manga_settings').upsert({id:1,brand_name:t('brand_name'),phone:t('phone'),address:t('address'),footer:t('footer'),updated_at:new Date().toISOString()});
   if(error)throw error;toast('تم حفظ بيانات الفاتورة');await renderPage('manga',{silent:true});
+}
+/* ====== كشف الجرد اليدوي (PDF عبر الطباعة) ====== */
+const COUNT_CSS='@page{size:A4;margin:10mm}*{box-sizing:border-box}body{font:12px Tahoma,Arial,sans-serif;color:#111;margin:0}.head{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:10px}.head img{width:54px;height:54px;object-fit:cover;border-radius:9px}.brand{font-size:21px;font-weight:700}.head h1{margin:2px 0 0;font-size:17px}.sub{font-size:11px;color:#444;margin-top:3px}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 16px;margin-bottom:10px;font-size:11.5px}table{width:100%;border-collapse:collapse}thead{display:table-header-group}th,td{border:1px solid #444;padding:4px 5px;text-align:right;vertical-align:middle}th{background:#eee;font-size:10.5px}td{height:9.5mm;font-size:11px}tr{page-break-inside:avoid}.c{text-align:center}small{display:block;color:#555;font-size:9px}.sum{margin-top:10px;font-weight:700;font-size:12px}.sign{display:flex;justify-content:space-between;margin-top:26px}.sign div{width:30%;border-top:1px solid #111;padding-top:5px;text-align:center;font-size:11px}';
+function buildCountSheetHtml(o){
+  const rows=o.rows||[];
+  const head=o.logo?`<div class="head"><img src="${o.logo}"><div><h1>كشف جرد يدوي</h1><div class="sub">${esc(o.brand||'')}</div></div></div>`:o.headHtml;
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف جرد يدوي</title><style>${COUNT_CSS}</style></head><body>${head}<div class="meta"><div>المخزن: <b>${esc(o.whName||'—')}</b></div><div>تاريخ الجرد: ................</div><div>القائم بالجرد: ................</div></div><table><thead><tr><th class="c" style="width:28px">م</th><th>العنوان</th><th style="width:20%">${esc(o.col3||'المؤلف')}</th><th style="width:15%">${esc(o.col4||'ISBN / الباركود')}</th>${o.showSys?'<th class="c" style="width:60px">الرصيد بالنظام</th>':''}<th class="c" style="width:70px">الجرد الفعلي</th><th class="c" style="width:55px">الفرق</th><th class="c" style="width:15%">ملاحظات</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td><b>${esc(r.title)}</b>${r.sub?`<small>${esc(r.sub)}</small>`:''}</td><td>${esc(r.c3||'')}</td><td>${esc(r.c4||'')}</td>${o.showSys?`<td class="c">${Number(r.sys||0)}</td>`:''}<td></td><td></td><td></td></tr>`).join('')}</tbody></table><div class="sum">عدد العناوين: ${rows.length}${o.showSys?` · إجمالي الرصيد بالنظام: ${rows.reduce((n,r)=>n+Number(r.sys||0),0)}`:''}</div><div class="sign"><div>القائم بالجرد</div><div>المراجع</div><div>أمين المخزن</div></div></body></html>`;
+}
+function openCountSheetModal(){
+  const chk='style="width:auto;display:inline;margin:0 0 0 8px"';
+  openModal('إصدار كشف جرد يدوي',`<div id="csRoot" class="stack"><p class="small muted">كشف ورقي بعناوين الكتب، فيه خانات فارغة للجرد الفعلي والفرق والملاحظات لتعبئتها بخط اليد. في نافذة الطباعة اختر «حفظ كـ PDF» أو اطبعه مباشرة.</p><label>المخزن<select id="csWh">${warehouses.map(w=>`<option value="${w.id}" ${w.id===activeWarehouse?.id?'selected':''}>${esc(w.name)}</option>`).join('')}</select></label><label><input type="checkbox" id="csSys" ${chk} checked>إظهار الرصيد بالنظام (أزل العلامة لجرد أعمى)</label><label><input type="checkbox" id="csHideZero" ${chk}>استبعاد الكتب التي رصيدها صفر</label><div class="form-actions"><button type="button" class="btn btn-primary" id="csGo">إصدار الكشف</button></div></div>`);
+  $('csGo').onclick=async()=>{
+    const btn=$('csGo');btn.disabled=true;
+    try{
+      const whId=$('csWh').value;const wh=warehouses.find(w=>w.id===whId);
+      const [books,inv]=await Promise.all([fetchAllRows(()=>sb.from('books').select('id,title,author_name,isbn,barcode').eq('active',true).order('title').order('id')),fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',whId).order('book_id'))]);
+      const q=new Map(inv.map(r=>[r.book_id,Number(r.qty)||0]));
+      let rows=books.map(b=>({title:b.title,c3:b.author_name,c4:b.isbn||b.barcode||'',sys:q.get(b.id)||0}));
+      if($('csHideZero').checked)rows=rows.filter(r=>r.sys>0);
+      if(!rows.length){toast('لا توجد كتب لإدراجها في الكشف',true);return;}
+      printHtmlDoc(buildCountSheetHtml({logo:new URL('logo.jpg',location.href).href,brand:'دار حواديت · حواديت متع عقلك',whName:wh?.name,rows,showSys:$('csSys').checked}));
+      closeModal();toast('في نافذة الطباعة اختر «حفظ كـ PDF» من قائمة الطابعة');
+    }catch(err){toast(errText(err),true);}finally{const b=$('csGo');if(b)b.disabled=false;}
+  };
+}
+async function printMangaCountSheet(){
+  const [titles,st]=await Promise.all([loadMangaTitles(),mangaSettings()]);
+  if(!titles.length){toast('لا توجد عناوين في المخزون',true);return;}
+  const showSys=confirm('إظهار الرصيد بالنظام في الكشف؟\nموافق = إظهار الرصيد، إلغاء = جرد أعمى (بدون الرصيد)');
+  printHtmlDoc(buildCountSheetHtml({headHtml:mangaHead(st,'كشف جرد يدوي'),whName:'مخزون المانجا',col3:'المؤلف',col4:'المجلد / الباركود',rows:titles.map(t=>({title:t.title,c3:t.author_name,c4:[t.volume&&('مجلد '+t.volume),t.barcode].filter(Boolean).join(' · '),sys:t.qty})),showSys}));
+  toast('في نافذة الطباعة اختر «حفظ كـ PDF» من قائمة الطابعة');
 }
 async function deleteExhibition(exId){
   const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
@@ -977,6 +1008,8 @@ async function handlePageClick(e){
    case 'new-exhibition':exhibitionModal();break;
    case 'edit-exhibition':{const {data,error}=await sb.from('warehouses').select('*').eq('id',id).single();if(error)throw error;exhibitionModal(data);}break;
    case 'pack-exhibition':await openPackModal(id);break;
+   case 'count-sheet':openCountSheetModal();break;
+   case 'manga-count-sheet':await printMangaCountSheet();break;
    case 'manga-tab':mangaTab=id;await renderPage('manga',{silent:true});break;
    case 'manga-new':mangaTitleModal();break;
    case 'manga-edit':mangaTitleModal(mangaTitlesCache.find(x=>x.id===id));break;
@@ -1064,5 +1097,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r9';
+const APP_BUILD='2026-10-16-r10';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
