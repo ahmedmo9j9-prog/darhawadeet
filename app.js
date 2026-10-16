@@ -249,8 +249,10 @@ async function renderDashboard(){
     <section class="panel"><div class="panel-head"><h3>تنبيهات المخزون</h3><button class="btn btn-sm" data-action="go-books">عرض الكتب</button></div>${table(['الكتاب','الرصيد','حد التنبيه'],(low||[]).map(x=>`<tr><td>${esc(x.title)}</td><td><span class="badge ${Number(x.qty)<=0?'badge-danger':'badge-warning'}">${Number(x.qty)}</span></td><td>${Number(x.min_stock||0)}</td></tr>`).join(''),'لا توجد أصناف تحت حد التنبيه')}</section></div>`;
 }
 async function getBooksAndInventory(warehouseId=activeWarehouse?.id){
-  const [bRes,iRes]=await Promise.all([sb.from('books').select('*').eq('active',true).order('title'),sb.from('inventory').select('book_id,qty,warehouse_id').eq('warehouse_id',warehouseId)]);
-  if(bRes.error)throw bRes.error;if(iRes.error)throw iRes.error;pageBooks=bRes.data||[];pageInventory=iRes.data||[];
+  const [books,inv]=await Promise.all([
+    fetchAllRows(()=>sb.from('books').select('*').eq('active',true).order('title').order('id')),
+    fetchAllRows(()=>sb.from('inventory').select('book_id,qty,warehouse_id').eq('warehouse_id',warehouseId).order('book_id'))]);
+  pageBooks=books||[];pageInventory=inv||[];
   const qtys=new Map(pageInventory.map(x=>[x.book_id,Number(x.qty)||0]));return pageBooks.map(b=>({...b,stock_qty:qtys.get(b.id)||0}));
 }
 function canEditBooks(){return ['manager','warehouse'].includes(profile.role);}
@@ -753,20 +755,22 @@ async function openPackModal(exId){
 
 async function renderWarehouses(){
   const {data:all,error}=await sb.from('warehouses').select('*').order('name');if(error)throw error;
-  const {data:inv}=await sb.from('inventory').select('warehouse_id,qty');const sums=new Map();(inv||[]).forEach(r=>sums.set(r.warehouse_id,(sums.get(r.warehouse_id)||0)+Number(r.qty||0)));
+  const inv=await fetchAllRows(()=>sb.from('inventory').select('warehouse_id,book_id,qty').order('warehouse_id').order('book_id'));const sums=new Map();(inv||[]).forEach(r=>sums.set(r.warehouse_id,(sums.get(r.warehouse_id)||0)+Number(r.qty||0)));
   $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>المخازن والتحويلات</h3><p>مخزن الدار والمعارض والفروع مع تحويل مخزني موثق</p></div><div class="tool-actions"><button class="btn" data-action="transfer-stock">تحويل بين مخزنين</button><button class="btn btn-primary" data-action="new-warehouse">+ مخزن جديد</button></div></div><section class="panel">${table(['اسم المخزن','النوع','الموقع','إجمالي النسخ','الحالة'],(all||[]).map(w=>`<tr><td><b>${esc(w.name)}</b></td><td>${esc(w.warehouse_type)}</td><td>${esc(w.location||'—')}</td><td>${sums.get(w.id)||0}</td><td><span class="badge ${w.active?'badge-ok':'badge-danger'}">${w.active?'نشط':'متوقف'}</span></td></tr>`).join(''),'لا توجد مخازن')}</section>`;
 }
 function newWarehouseModal(){openModal('إضافة مخزن أو معرض',`<form id="warehouseForm" class="form-grid">${modalFormField('اسم المخزن *','name','','text','required')}${selectField('نوع المخزن','warehouse_type',[{value:'main',label:'مخزن رئيسي'},{value:'branch',label:'فرع'},{value:'exhibition',label:'معرض'},{value:'library',label:'مكتبة'},{value:'other',label:'أخرى'}],'other')}${modalFormField('الموقع','location')}<div class="form-actions full"><button class="btn btn-primary">حفظ</button></div></form>`);}
 async function transferStockModal(){
-  const {data:books,error}=await sb.from('books').select('id,title').eq('active',true).order('title');if(error)throw error;
+  const books=await fetchAllRows(()=>sb.from('books').select('id,title').eq('active',true).order('title').order('id'));
   openModal('تحويل مخزون بين مخزنين',`<form id="transferForm" class="form-grid">${selectField('الكتاب',["book_id"].join(''),books.map(b=>({value:b.id,label:b.title})))}${selectField('من مخزن','from_id',warehouses.map(w=>({value:w.id,label:w.name})),activeWarehouse.id)}${selectField('إلى مخزن','to_id',warehouses.map(w=>({value:w.id,label:w.name})),warehouses.find(w=>w.id!==activeWarehouse.id)?.id||'')}${modalFormField('الكمية','qty','1','number','required min="1"')}${modalFormField('ملاحظات','notes')}<div class="form-actions full"><button class="btn btn-primary">تأكيد التحويل</button></div></form>`);
 }
 
 async function renderAuthors(){
- const [{data,error},{data:books,error:be},{data:lines,error:le},{data:invoices,error:ie}]=await Promise.all([
-  sb.from('authors').select('*').eq('active',true).order('name'),sb.from('books').select('id,title,author_name'),
-  sb.from('invoice_items').select('book_id,qty,line_total,invoice_id'),sb.from('invoices').select('id,status').in('status',['completed','returned'])]);
- if(error)throw error;if(be)throw be;if(le)throw le;if(ie)throw ie;pageAuthors=data||[];
+ const [{data,error},books,lines,invoices]=await Promise.all([
+   sb.from('authors').select('*').eq('active',true).order('name'),
+   fetchAllRows(()=>sb.from('books').select('id,title,author_name').order('id')),
+   fetchAllRows(()=>sb.from('invoice_items').select('book_id,qty,line_total,invoice_id').order('id')),
+   fetchAllRows(()=>sb.from('invoices').select('id,status').in('status',['completed','returned']).order('id'))]);
+  if(error)throw error;pageAuthors=data||[];
  const liveInvoices=new Set((invoices||[]).map(x=>x.id));const bookMap=new Map((books||[]).map(x=>[x.id,x]));const summary=new Map();
  (lines||[]).filter(x=>liveInvoices.has(x.invoice_id)).forEach(x=>{const b=bookMap.get(x.book_id);if(!b?.author_name)return;const key=b.author_name.trim().toLowerCase();const t=summary.get(key)||{qty:0,sales:0};t.qty+=Number(x.qty||0);t.sales+=Number(x.line_total||0);summary.set(key,t);});
  $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>المؤلفون ومستحقاتهم</h3><p>النسب والمبيعات ومبالغ المستحقات التقديرية حسب أسماء المؤلفين المسجلة بالكتب</p></div><button class="btn btn-primary" data-action="new-author">+ إضافة مؤلف</button></div><section class="panel">${table(['المؤلف','النسبة','النسخ المسجلة','قيمة البنود','المستحق التقديري','البريد','تعديل'],pageAuthors.map(a=>{const x=summary.get(a.name.trim().toLowerCase())||{qty:0,sales:0};return `<tr><td><b>${esc(a.name)}</b></td><td>${Number(a.share_percent)}%</td><td>${x.qty}</td><td>${money(x.sales)}</td><td><b>${money(x.sales*Number(a.share_percent||0)/100)}</b></td><td>${esc(a.email||'—')}</td><td><button class="btn btn-sm" data-action="edit-author" data-id="${a.id}">تعديل</button></td></tr>`}).join(''),'أضف بيانات المؤلفين أولًا')}</section><div class="info-strip">الحساب تقديري على إجمالي بنود الفواتير، قبل خصم المرتجعات التفصيلية أو أي شروط تعاقدية خاصة. تأكد أن اسم المؤلف في الكتاب يطابق الاسم المسجل هنا.</div>`;
@@ -878,10 +882,10 @@ async function settleShipmentModal(id){
 }
 
 async function renderPrinting(){
- const [orders,books]=await Promise.all([sb.from('print_orders').select('*').order('created_at',{ascending:false}).limit(100),sb.from('books').select('id,title').eq('active',true).order('title')]);if(orders.error)throw orders.error;const bookMap=new Map((books.data||[]).map(b=>[b.id,b.title]));
+ const [orders,books]=await Promise.all([sb.from('print_orders').select('*').order('created_at',{ascending:false}).limit(100),fetchAllRows(()=>sb.from('books').select('id,title').eq('active',true).order('title').order('id')).then(d=>({data:d}))]);if(orders.error)throw orders.error;const bookMap=new Map((books.data||[]).map(b=>[b.id,b.title]));
  $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>المطبعة والطبعات</h3><p>أوامر الطباعة وتكلفة الطبعة واستلام النسخ إلى المخزن</p></div><button class="btn btn-primary" data-action="new-print-order">+ أمر طباعة</button></div><section class="panel">${table(['الكتاب','الكمية','المطبعة','التكلفة','المخزن','التاريخ','الحالة','إجراءات'],(orders.data||[]).map(o=>`<tr><td>${esc(bookMap.get(o.book_id)||'—')}</td><td>${o.qty}</td><td>${esc(o.printer||'—')}</td><td>${money(o.total_cost)}</td><td>${esc(warehouses.find(w=>w.id===o.warehouse_id)?.name||'—')}</td><td>${dateOnly(o.created_at)}</td><td>${esc(o.status)}</td><td>${o.status!=='received'&&o.status!=='cancelled'?`<button class="btn btn-sm" data-action="receive-print-order" data-id="${o.id}">استلام النسخ</button>`:'—'}</td></tr>`).join(''),'لا توجد أوامر طباعة')}</section>`;
 }
-async function newPrintOrderModal(){const {data:books,error}=await sb.from('books').select('id,title').eq('active',true).order('title');if(error)throw error;openModal('إنشاء أمر طباعة',`<form id="printOrderForm" class="form-grid">${selectField('الكتاب','book_id',(books||[]).map(x=>({value:x.id,label:x.title})))}${modalFormField('عدد النسخ','qty','1000','number','required min="1"')}${modalFormField('اسم المطبعة','printer')}${modalFormField('تكلفة الطبعة','total_cost','0','number','required min="0" step="0.01"')}${selectField('المخزن عند الاستلام','warehouse_id',warehouses.map(x=>({value:x.id,label:x.name})),activeWarehouse.id)}<div class="form-actions full"><button class="btn btn-primary">حفظ أمر الطباعة</button></div></form>`);}
+async function newPrintOrderModal(){const books=await fetchAllRows(()=>sb.from('books').select('id,title').eq('active',true).order('title').order('id'));openModal('إنشاء أمر طباعة',`<form id="printOrderForm" class="form-grid">${selectField('الكتاب','book_id',(books||[]).map(x=>({value:x.id,label:x.title})))}${modalFormField('عدد النسخ','qty','1000','number','required min="1"')}${modalFormField('اسم المطبعة','printer')}${modalFormField('تكلفة الطبعة','total_cost','0','number','required min="0" step="0.01"')}${selectField('المخزن عند الاستلام','warehouse_id',warehouses.map(x=>({value:x.id,label:x.name})),activeWarehouse.id)}<div class="form-actions full"><button class="btn btn-primary">حفظ أمر الطباعة</button></div></form>`);}
 
 async function renderExpenses(){
  const {data,error}=await sb.from('expenses').select('*').order('expense_date',{ascending:false}).limit(200);if(error)throw error;const total=(data||[]).reduce((s,x)=>s+Number(x.amount||0),0);
@@ -1060,5 +1064,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r7';
+const APP_BUILD='2026-10-16-r8';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
