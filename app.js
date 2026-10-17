@@ -13,6 +13,7 @@ const NAV = [
   {id:'warehouses', title:'المخازن والتحويلات', icon:'⇄', roles:['manager','warehouse']},
   {id:'exhibitions', title:'المعارض وكشف التعبئة', icon:'🎪', roles:['manager','warehouse']},
   {id:'manga', title:'المانجا', icon:'📖', roles:['manager','cashier','warehouse','accountant']},
+  {id:'online', title:'الأوردرات الأونلاين', icon:'🛒', roles:['manager','cashier','warehouse','accountant']},
   {id:'authors', title:'المؤلفون', icon:'✎', roles:['manager','accountant']},
   {id:'consignment', title:'الأمانة والمكتبات', icon:'⇆', roles:['manager','accountant','warehouse']},
   {id:'printing', title:'الطباعة والطبعات', icon:'▧', roles:['manager','accountant','warehouse']},
@@ -205,6 +206,7 @@ async function renderPage(page,opts={}){
       case'warehouses':await renderWarehouses();break;
       case'exhibitions':await renderExhibitions();break;
       case'manga':await renderManga();break;
+      case'online':await renderOnline();break;
       case'authors':await renderAuthors();break;
       case'consignment':await renderConsignment();break;
       case'printing':await renderPrinting();break;
@@ -683,6 +685,198 @@ async function printMangaCountSheet(){
   printHtmlDoc(buildCountSheetHtml({headHtml:mangaHead(st,'كشف جرد يدوي'),whName:'مخزون المانجا',col3:'المؤلف',col4:'المجلد / الباركود',rows:titles.map(t=>({title:t.title,c3:t.author_name,c4:[mangaVolLabel(t),t.barcode].filter(Boolean).join(' · '),sys:t.qty})),showSys}));
   toast('في نافذة الطباعة اختر «حفظ كـ PDF» من قائمة الطابعة');
 }
+/* ====== الأوردرات الأونلاين وشركات الشحن ====== */
+let onlineTab='orders';let onlineCache={companies:[],orders:[]};let ord=null;
+const ORD_STATUS={new:['جديد',''],packing:['جاري التجهيز','badge-warning'],shipped:['تم الشحن',''],delivered:['تم التسليم','badge-ok'],returned:['مرتجع','badge-danger'],cancelled:['ملغي','badge-danger']};
+const ORD_NEXT={new:['packing','shipped','cancelled'],packing:['shipped','cancelled'],shipped:['delivered','returned','cancelled'],delivered:['returned'],returned:[],cancelled:[]};
+const canOrder=()=>['manager','cashier','warehouse'].includes(profile.role);
+const canSettleOrders=()=>['manager','accountant'].includes(profile.role);
+const canCompanies=()=>['manager','warehouse','accountant'].includes(profile.role);
+const ordBadge=s=>`<span class="badge ${(ORD_STATUS[s]||['',''])[1]}">${(ORD_STATUS[s]||[s])[0]}</span>`;
+const ordNet=o=>Number(o.cod_amount||0)-Number(o.company_fee||0);
+function trackingLink(o){
+  const c=onlineCache.companies.find(x=>x.id===o.company_id);const no=o.tracking_no;
+  if(!no)return '—';
+  const u=c?.tracking_url?String(c.tracking_url).trim():'';
+  if(/^https?:\/\//i.test(u)){const href=u.includes('{tracking}')?u.replace('{tracking}',encodeURIComponent(no)):u;return `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(no)}</a>`;}
+  return esc(no);
+}
+async function loadOnlineData(){
+  const [companies,orders]=await Promise.all([
+    fetchAllRows(()=>sb.from('shipping_companies').select('*').eq('active',true).order('name').order('id')),
+    fetchAllRows(()=>sb.from('online_orders').select('*').order('created_at',{ascending:false}).order('id',{ascending:false}))]);
+  onlineCache={companies,orders};
+}
+async function renderOnline(){
+  const tabs=[['orders','الأوردرات'],['companies','شركات الشحن'],['settle','تسوية شركات الشحن']].filter(t=>t[0]!=='settle'||canSettleOrders());
+  if(!tabs.some(t=>t[0]===onlineTab))onlineTab='orders';
+  $('pageRoot').innerHTML=`<div class="toolbar">${tabs.map(t=>`<button class="btn ${t[0]===onlineTab?'btn-primary':''}" data-action="online-tab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div><div id="onlineBody"><div class="loading-card">جارٍ التحميل…</div></div>`;
+  await loadOnlineData();
+  if(onlineTab==='orders')renderOnlineOrders();else if(onlineTab==='companies')renderOnlineCompanies();else renderOnlineSettle();
+}
+function renderOnlineOrders(){
+  const {companies,orders}=onlineCache;
+  const cnt=s=>orders.filter(o=>s.includes(o.status)).length;
+  const due=orders.filter(o=>o.status==='delivered'&&!o.settled_at).reduce((n,o)=>n+ordNet(o),0);
+  $('onlineBody').innerHTML=`<div class="stats-grid">${cardKpi('تحت التجهيز',cnt(['new','packing']))}${cardKpi('عند شركات الشحن',cnt(['shipped']))}${cardKpi('تم تسليمها',cnt(['delivered']))}${cardKpi('مرتجعة',cnt(['returned']))}${cardKpi('مستحق من شركات الشحن',money(due),'تسليم غير مسوّى بعد خصم الرسوم')}</div><div class="page-tools"><div><h3>الأوردرات الأونلاين</h3><p>أوردرات العملاء وربطها بشركات الشحن</p></div><div class="tool-actions">${canOrder()?'<button class="btn btn-primary" data-action="online-new">+ أوردر جديد</button>':''}<button class="btn" data-action="online-export">تصدير Excel لشركة الشحن</button></div></div><div class="toolbar"><input id="ordSearch" placeholder="ابحث بالاسم أو الهاتف أو رقم الأوردر أو رقم الشحنة"><select id="ordStatusF"><option value="">كل الحالات</option>${Object.entries(ORD_STATUS).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join('')}</select><select id="ordCompanyF"><option value="">كل الشركات</option>${companies.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div><section class="panel"><div id="ordTable"></div></section>`;
+  const draw=()=>{
+    const q=($('ordSearch').value||'').trim().toLowerCase(),sf=$('ordStatusF').value,cf=$('ordCompanyF').value;
+    const list=orders.filter(o=>(!sf||o.status===sf)&&(!cf||o.company_id===cf)&&(!q||[o.order_no,o.customer_name,o.customer_phone,o.tracking_no,o.governorate].some(v=>String(v||'').toLowerCase().includes(q))));
+    onlineCache.shown=list;
+    $('ordTable').innerHTML=table(['الأوردر','التاريخ','العميل','المحافظة','شركة الشحن','رقم الشحنة','المطلوب تحصيله','الحالة','إجراءات'],list.slice(0,300).map(o=>{const c=companies.find(x=>x.id===o.company_id);return `<tr><td><b>${esc(o.order_no)}</b>${o.source?`<span class="subline">${esc(o.source)}</span>`:''}</td><td>${esc(dateOnly(o.created_at))}</td><td>${esc(o.customer_name)}<span class="subline">${esc(o.customer_phone)}</span></td><td>${esc(o.governorate||'—')}</td><td>${esc(c?.name||'—')}</td><td>${trackingLink(o)}</td><td>${o.payment_type==='cod'?money(o.cod_amount):'<span class="badge badge-ok">مدفوع</span>'}</td><td>${ordBadge(o.status)}${o.settled_at?'<span class="subline">مُسوّى</span>':''}</td><td><div class="tool-actions"><button class="btn btn-sm" data-action="online-print" data-id="${o.id}">🖨</button>${canOrder()&&!o.settled_at&&ORD_NEXT[o.status].length?`<button class="btn btn-sm btn-primary" data-action="online-status" data-id="${o.id}">تحديث الحالة</button>`:''}${canOrder()&&!o.settled_at?`<button class="btn btn-sm" data-action="online-edit" data-id="${o.id}">تعديل</button>`:''}</div></td></tr>`;}).join(''),'لا توجد أوردرات');
+  };
+  $('ordSearch').oninput=draw;$('ordStatusF').onchange=draw;$('ordCompanyF').onchange=draw;draw();
+}
+/* ---- شركات الشحن ---- */
+function renderOnlineCompanies(){
+  const {companies}=onlineCache;const ed=canCompanies();
+  $('onlineBody').innerHTML=`<div class="page-tools"><div><h3>شركات الشحن</h3><p>الشركات المتعاقد معها ورسوم الشحن ورابط التتبع</p></div><div class="tool-actions">${ed?'<button class="btn btn-primary" data-action="company-new">+ شركة شحن</button>':''}</div></div><section class="panel">${table(['الشركة','الهاتف','رابط التتبع','رسوم الشحن الافتراضية','ملاحظات','إجراءات'],companies.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.phone||'—')}</td><td>${c.tracking_url?'<span class="badge badge-ok">مضبوط</span>':'—'}</td><td>${money(c.default_fee)}</td><td>${esc(c.notes||'—')}</td><td>${ed?`<div class="tool-actions"><button class="btn btn-sm" data-action="company-edit" data-id="${c.id}">تعديل</button><button class="btn btn-sm" data-action="company-delete" data-id="${c.id}" style="color:var(--bad);border-color:var(--bad)">🗑</button></div>`:''}</td></tr>`).join(''),'لا توجد شركات شحن بعد. اضغط «شركة شحن» لإضافة أول شركة.')}</section><div class="info-strip">رابط التتبع: اكتب رابط صفحة التتبع عند الشركة، واكتب <b>{tracking}</b> مكان رقم الشحنة، مثال: <span dir="ltr">https://example.com/track?no={tracking}</span>. بيظهر رقم الشحنة في الأوردرات كرابط يفتح صفحة التتبع.</div>`;
+}
+function companyModal(c=null){
+  const b=c||{};
+  openModal(c?'تعديل شركة شحن':'إضافة شركة شحن',`<form id="shipCompanyForm" class="form-grid" novalidate><input type="hidden" name="rec_id" value="${esc(b.id||'')}">${modalFormField('اسم الشركة *','name',b.name||'')}${modalFormField('هاتف الشركة','phone',b.phone||'')}${modalFormField('رسوم الشحن الافتراضية (علينا)','default_fee',b.default_fee??0,'number')}<label class="full">رابط التتبع (استخدم {tracking} مكان رقم الشحنة)<input name="tracking_url" dir="ltr" value="${esc(b.tracking_url||'')}" placeholder="https://example.com/track?no={tracking}"></label><label class="full">ملاحظات<textarea name="notes" rows="2">${esc(b.notes||'')}</textarea></label><div class="form-actions full"><button type="submit" class="btn btn-primary">حفظ</button><button type="button" class="btn" data-action="close-modal">إلغاء</button></div><div class="message full"></div></form>`);
+}
+async function saveShipCompany(form){
+  const fd=new FormData(form);const rid=String(fd.get('rec_id')||'');const txt=k=>String(fd.get(k)||'').trim();
+  if(!txt('name'))throw new Error('اسم الشركة مطلوب');
+  const fr=txt('default_fee');if(fr&&!/[0-9٠-٩۰-۹]/.test(fr))throw new Error('الرسوم يجب أن تكون رقمًا');
+  const url=txt('tracking_url');if(url&&!/^https?:\/\//i.test(url))throw new Error('رابط التتبع لازم يبدأ بـ http:// أو https://');
+  const rec={name:txt('name'),phone:txt('phone')||null,default_fee:Math.max(0,Math.round(numValue(fr,0)*100)/100),tracking_url:url||null,notes:txt('notes')||null,active:true};
+  const res=rid?await sb.from('shipping_companies').update(rec).eq('id',rid):await sb.from('shipping_companies').insert(rec);
+  if(res.error){if(res.error.code==='23505')throw new Error('يوجد شركة بنفس الاسم بالفعل');throw res.error;}
+  closeModal();toast('تم حفظ شركة الشحن');await renderPage('online',{silent:true});
+}
+async function deleteShipCompany(id){
+  const c=onlineCache.companies.find(x=>x.id===id);
+  if(!confirm(`هل تريد حذف شركة «${c?.name||''}»؟\nلو لها أوردرات سابقة سيتم إخفاؤها بدلًا من حذفها حفاظًا على السجل.`))return;
+  const d=await sb.from('shipping_companies').delete().eq('id',id).select('id');
+  if(!d.error&&(d.data||[]).length)toast('تم حذف الشركة');
+  else if(d.error&&d.error.code==='23503'){const u=await sb.from('shipping_companies').update({active:false,name:`${c?.name||'شركة'} (محذوفة ${new Date().toISOString().slice(0,10)} ${String(id).slice(0,4)})`}).eq('id',id).select('id');if(u.error)throw u.error;toast('تم حذف الشركة (أُخفيت مع حفظ سجل أوردراتها)');}
+  else if(d.error)throw d.error;else throw new Error('لا تملك صلاحية الحذف');
+  await renderPage('online',{silent:true});
+}
+/* ---- أوردر جديد ---- */
+function drawOrdResults(){
+  const q=($('ordSearchBook').value||'').trim().toLowerCase();const box=$('ordResults');
+  if(!q){box.innerHTML='<div class="small muted">اكتب اسم الكتاب أو المؤلف أو الـ ISBN لإضافته.</div>';return;}
+  const list=ord.books.filter(b=>[b.title,b.author_name,b.isbn,b.barcode].some(v=>String(v||'').toLowerCase().includes(q))).slice(0,8);
+  box.innerHTML=list.length?`<div class="return-items">${list.map(b=>{const st=ord.stock.get(b.id)||0;const added=ord.lines.has(b.id);return `<div class="return-item"><div><b>${esc(b.title)}</b><small>${esc(b.author_name||'')} · الرصيد: ${st} · السعر: ${money(b.sale_price||0)}</small></div><button type="button" class="btn btn-sm" data-ord-add="${b.id}" ${added||st<=0?'disabled':''}>${added?'مضاف':st<=0?'نفد':'+ إضافة'}</button></div>`;}).join('')}</div>`:'<div class="small muted">لا توجد نتائج.</div>';
+}
+function ordTotals(){
+  const arr=[...ord.lines.values()];const sub=arr.reduce((n,l)=>n+l.qty*l.price,0);
+  const disc=Math.min(sub,Math.max(0,numValue($('ordDisc').value,0)));const ship=Math.max(0,numValue($('ordShip').value,0));
+  const total=sub-disc+ship;return {arr,sub,disc,ship,total,cod:$('ordPay').value==='cod'?total:0};
+}
+function drawOrdLines(){
+  const t=ordTotals();const inp='style="width:80px;padding:6px;border:1px solid var(--line);border-radius:8px"';
+  $('ordLines').innerHTML=(t.arr.length?table(['العنوان','الرصيد','الكمية','السعر','الإجمالي',''],t.arr.map(l=>{const st=ord.stock.get(l.book.id)||0;return `<tr><td><b>${esc(l.book.title)}</b></td><td class="${l.qty>st?'bad':''}">${st}</td><td><input type="text" inputmode="decimal" data-num value="${l.qty}" data-ord-qty="${l.book.id}" ${inp}></td><td><input type="text" inputmode="decimal" data-num value="${l.price}" data-ord-price="${l.book.id}" ${inp}></td><td>${money(l.qty*l.price)}</td><td><button type="button" class="delete-btn" data-ord-del="${l.book.id}">×</button></td></tr>`;}).join('')):'<div class="empty-box">لم تتم إضافة كتب بعد</div>')+`<div class="total-chip" style="margin-top:10px">كتب: ${money(t.sub)}${t.disc?` · خصم: ${money(t.disc)}`:''} · شحن: ${money(t.ship)} · الإجمالي: <b>${money(t.total)}</b> · المطلوب تحصيله: <b>${money(t.cod)}</b></div>`;
+}
+async function loadOrdStock(){
+  const inv=await fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',ord.whId).order('book_id'));
+  ord.stock=new Map(inv.map(r=>[r.book_id,Number(r.qty)||0]));ord.lines=new Map();drawOrdResults();drawOrdLines();
+}
+async function orderModal(){
+  const companies=onlineCache.companies;
+  const books=await fetchAllRows(()=>sb.from('books').select('id,title,author_name,isbn,barcode,sale_price').eq('active',true).order('title').order('id'));
+  ord={books,stock:new Map(),lines:new Map(),whId:activeWarehouse.id};
+  openModal('أوردر أونلاين جديد',`<div id="ordRoot"><div class="form-grid">${modalFormField('اسم العميل *','ord_name','')}${modalFormField('هاتف العميل *','ord_phone','')}${modalFormField('المحافظة','ord_gov','')}<label class="full">العنوان بالتفصيل<input name="ord_addr" id="ordAddr"></label><label>مصدر الأوردر<input id="ordSource" list="ordSources" placeholder="فيسبوك / واتساب / الموقع…"><datalist id="ordSources"><option value="فيسبوك"><option value="إنستجرام"><option value="واتساب"><option value="تيك توك"><option value="الموقع"></datalist></label><label>شركة الشحن<select id="ordCompany"><option value="">بدون شركة الآن</option>${companies.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label><label>المخزن<select id="ordWh">${warehouses.map(w=>`<option value="${w.id}" ${w.id===ord.whId?'selected':''}>${esc(w.name)}</option>`).join('')}</select></label><label>طريقة الدفع<select id="ordPay"><option value="cod">دفع عند الاستلام</option><option value="prepaid">مدفوع مقدمًا</option></select></label><label>مصاريف الشحن على العميل<input id="ordShip" type="text" inputmode="decimal" data-num value="0"></label><label>خصم على الكتب (مبلغ)<input id="ordDisc" type="text" inputmode="decimal" data-num value="0"></label><label>رسوم الشركة علينا<input id="ordFee" type="text" inputmode="decimal" data-num placeholder="تلقائي من الشركة"></label><label class="full">ابحث عن كتاب (العنوان / المؤلف / ISBN)<input id="ordSearchBook" autocomplete="off" placeholder="اكتب للبحث ثم اضغط إضافة"></label></div><div id="ordResults" style="margin:8px 0"></div><div id="ordLines"></div><label style="display:block;margin-top:10px">ملاحظات<textarea id="ordNotes" rows="2" style="width:100%;margin-top:5px;border:1px solid var(--line);border-radius:9px;padding:9px"></textarea></label><div class="form-actions" style="margin-top:12px"><button type="button" class="btn btn-primary" id="ordConfirm">حفظ الأوردر وطباعة البوليصة</button></div><p class="small muted">الكميات بتتخصم من المخزن أول ما تحفظ الأوردر، وبترجع تلقائيًا لو اتلغى أو رجع.</p></div>`);
+  const root=$('ordRoot');
+  root.addEventListener('click',e=>{
+    const a=e.target.closest('[data-ord-add]');
+    if(a){const b=ord.books.find(x=>x.id===a.dataset.ordAdd);if(b&&!ord.lines.has(b.id)){ord.lines.set(b.id,{book:b,qty:1,price:Number(b.sale_price||0)});drawOrdResults();drawOrdLines();}return;}
+    const d=e.target.closest('[data-ord-del]');if(d){ord.lines.delete(d.dataset.ordDel);drawOrdResults();drawOrdLines();}
+  });
+  root.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
+    if(t.dataset.ordQty){const l=ord.lines.get(t.dataset.ordQty);if(l){l.qty=Math.max(1,Math.trunc(numValue(t.value,1)));drawOrdLines();}}
+    else if(t.dataset.ordPrice){const l=ord.lines.get(t.dataset.ordPrice);if(l){l.price=Math.max(0,numValue(t.value,0));drawOrdLines();}}});
+  $('ordSearchBook').oninput=drawOrdResults;
+  ['ordDisc','ordShip'].forEach(i=>{$(i).oninput=drawOrdLines;});
+  $('ordPay').onchange=drawOrdLines;
+  $('ordCompany').onchange=e=>{const c=companies.find(x=>x.id===e.target.value);$('ordFee').value=c?String(c.default_fee):'';};
+  $('ordWh').onchange=async e=>{try{ord.whId=e.target.value;await loadOrdStock();}catch(err){toast(errText(err),true);}};
+  $('ordConfirm').onclick=async()=>{
+    try{
+      const name=root.querySelector('[name=ord_name]').value.trim(),phone=root.querySelector('[name=ord_phone]').value.trim();
+      if(!name)throw new Error('اسم العميل مطلوب');if(!phone)throw new Error('هاتف العميل مطلوب');
+      const t=ordTotals();if(!t.arr.length)throw new Error('أضف كتبًا أولًا');
+      const over=t.arr.filter(l=>l.qty>(ord.stock.get(l.book.id)||0));if(over.length)throw new Error('الكمية أكبر من الرصيد: '+over.map(l=>l.book.title).join('، '));
+      if(!confirm(`حفظ أوردر ${name}؟ الإجمالي ${money(t.total)}${t.cod?` والمطلوب تحصيله ${money(t.cod)}`:' (مدفوع مقدمًا)'}.`))return;
+      $('ordConfirm').disabled=true;
+      const feeRaw=$('ordFee').value.trim();
+      const {data,error}=await sb.rpc('create_online_order',{p_customer_name:name,p_customer_phone:phone,p_governorate:root.querySelector('[name=ord_gov]').value.trim()||null,p_address:$('ordAddr').value.trim()||null,p_source:$('ordSource').value.trim()||null,p_company_id:$('ordCompany').value||null,p_warehouse_id:ord.whId,p_payment_type:$('ordPay').value,p_shipping_fee:t.ship,p_discount:t.disc,p_company_fee:feeRaw===''?null:Math.max(0,numValue(feeRaw,0)),p_items:t.arr.map(l=>({book_id:l.book.id,qty:l.qty,unit_price:l.price})),p_notes:$('ordNotes').value.trim()||null});
+      if(error)throw error;
+      closeModal();toast('تم تسجيل الأوردر');await renderPage('online',{silent:true});await printOnlineOrder(data);
+    }catch(err){toast(errText(err),true);const b=$('ordConfirm');if(b)b.disabled=false;}
+  };
+  await loadOrdStock();
+}
+/* ---- تحديث الحالة والتعديل ---- */
+function orderStatusModal(id){
+  const o=onlineCache.orders.find(x=>x.id===id);if(!o)return;
+  const next=ORD_NEXT[o.status]||[];
+  openModal('تحديث حالة '+o.order_no,`<div id="ordStRoot" class="stack"><p class="small muted">الحالة الحالية: ${ordBadge(o.status)}</p><label>الحالة الجديدة<select id="ordNewStatus">${next.map(s=>`<option value="${s}">${ORD_STATUS[s][0]}</option>`).join('')}</select></label><label>رقم الشحنة (اختياري)<input id="ordTrack" value="${esc(o.tracking_no||'')}" dir="ltr"></label><p class="small muted">«مرتجع» و«ملغي» بيرجّعوا الكتب للمخزن تلقائيًا.</p><div class="form-actions"><button type="button" class="btn btn-primary" id="ordStGo">تأكيد</button></div></div>`);
+  $('ordStGo').onclick=async()=>{
+    const st=$('ordNewStatus').value;const btn=$('ordStGo');
+    try{
+      if(['returned','cancelled'].includes(st)&&!confirm(`سيتم تغيير الحالة إلى «${ORD_STATUS[st][0]}» وإرجاع الكتب للمخزن. متابعة؟`))return;
+      btn.disabled=true;
+      const {error}=await sb.rpc('set_online_order_status',{p_order_id:id,p_status:st,p_tracking:$('ordTrack').value.trim()||null});if(error)throw error;
+      closeModal();toast('تم تحديث الحالة');await renderPage('online',{silent:true});
+    }catch(err){toast(errText(err),true);btn.disabled=false;}
+  };
+}
+function orderEditModal(id){
+  const o=onlineCache.orders.find(x=>x.id===id);if(!o)return;
+  openModal('تعديل بيانات الشحن '+o.order_no,`<div id="ordEdRoot" class="stack"><label>شركة الشحن<select id="edCompany"><option value="">بدون شركة</option>${onlineCache.companies.map(c=>`<option value="${c.id}" ${c.id===o.company_id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label><label>رقم الشحنة<input id="edTrack" dir="ltr" value="${esc(o.tracking_no||'')}"></label><label>رسوم الشركة علينا<input id="edFee" type="text" inputmode="decimal" data-num value="${Number(o.company_fee||0)}"></label><label>ملاحظات<textarea id="edNotes" rows="2">${esc(o.notes||'')}</textarea></label><div class="form-actions"><button type="button" class="btn btn-primary" id="edGo">حفظ</button></div></div>`);
+  $('edGo').onclick=async()=>{
+    const btn=$('edGo');
+    try{btn.disabled=true;const {error}=await sb.rpc('update_online_order_info',{p_order_id:id,p_company_id:$('edCompany').value||null,p_tracking:$('edTrack').value.trim()||null,p_company_fee:Math.max(0,numValue($('edFee').value,0)),p_notes:$('edNotes').value.trim()||null});if(error)throw error;closeModal();toast('تم حفظ التعديل');await renderPage('online',{silent:true});}
+    catch(err){toast(errText(err),true);btn.disabled=false;}
+  };
+}
+/* ---- التسوية مع شركات الشحن ---- */
+function renderOnlineSettle(){
+  const {companies,orders}=onlineCache;
+  const rows=companies.map(c=>{
+    const mine=orders.filter(o=>o.company_id===c.id&&['delivered','returned'].includes(o.status)&&!o.settled_at);
+    const del=mine.filter(o=>o.status==='delivered'),ret=mine.filter(o=>o.status==='returned');
+    return {c,mine,del,ret,cod:del.reduce((n,o)=>n+Number(o.cod_amount),0),fees:mine.reduce((n,o)=>n+Number(o.company_fee),0)};
+  });
+  $('onlineBody').innerHTML=`<div class="page-tools"><div><h3>تسوية شركات الشحن</h3><p>المبالغ اللي حصّلتها الشركة من العملاء وتستحقها الدار بعد خصم رسوم الشحن</p></div></div><section class="panel">${table(['الشركة','أوردرات مُسلَّمة','المحصّل عند الشركة','أوردرات مرتجعة','رسوم الشحن','الصافي المستحق','إجراءات'],rows.map(r=>`<tr><td><b>${esc(r.c.name)}</b></td><td>${r.del.length}</td><td>${money(r.cod)}</td><td>${r.ret.length}</td><td>${money(r.fees)}</td><td><b class="${r.cod-r.fees<0?'bad':'good'}">${money(r.cod-r.fees)}</b></td><td>${r.mine.length?`<button class="btn btn-sm btn-primary" data-action="online-settle" data-id="${r.c.id}">تسوية</button>`:'—'}</td></tr>`).join(''),'لا توجد شركات شحن')}</section><div class="info-strip">الصافي = المبالغ المحصّلة من العملاء − رسوم الشحن (للمُسلَّم والمرتجع). بعد ما تستلم المبلغ من الشركة اضغط «تسوية» لإغلاق الأوردرات دي.</div>`;
+}
+function settleModal(companyId){
+  const c=onlineCache.companies.find(x=>x.id===companyId);
+  const mine=onlineCache.orders.filter(o=>o.company_id===companyId&&['delivered','returned'].includes(o.status)&&!o.settled_at);
+  if(!mine.length){toast('لا توجد أوردرات للتسوية',true);return;}
+  openModal('تسوية '+(c?.name||''),`<div id="stlRoot"><p class="small muted">حدد الأوردرات اللي استلمت مستحقاتها من الشركة.</p>${table(['','الأوردر','العميل','الحالة','المحصّل','الرسوم','الصافي'],mine.map(o=>`<tr><td><input type="checkbox" data-stl="${o.id}" checked style="width:auto"></td><td>${esc(o.order_no)}</td><td>${esc(o.customer_name)}</td><td>${ordBadge(o.status)}</td><td>${money(o.status==='delivered'?o.cod_amount:0)}</td><td>${money(o.company_fee)}</td><td>${money((o.status==='delivered'?Number(o.cod_amount):0)-Number(o.company_fee))}</td></tr>`).join(''))}<div class="total-chip" id="stlTotal" style="margin-top:10px"></div><div class="form-actions" style="margin-top:12px"><button type="button" class="btn btn-primary" id="stlGo">تأكيد استلام المبلغ وتسوية المحدد</button></div></div>`);
+  const calc=()=>{const sel=[...document.querySelectorAll('#stlRoot [data-stl]:checked')].map(i=>mine.find(o=>o.id===i.dataset.stl));const net=sel.reduce((n,o)=>n+(o.status==='delivered'?Number(o.cod_amount):0)-Number(o.company_fee),0);$('stlTotal').innerHTML=`${sel.length} أوردر · الصافي المستحق: <b>${money(net)}</b>`;return sel;};
+  $('stlRoot').addEventListener('change',calc);calc();
+  $('stlGo').onclick=async()=>{
+    const sel=calc();if(!sel.length){toast('حدد أوردرًا واحدًا على الأقل',true);return;}
+    if(!confirm(`تسوية ${sel.length} أوردر مع «${c?.name||''}»؟ لا يمكن تعديلها بعد ذلك.`))return;
+    const btn=$('stlGo');
+    try{btn.disabled=true;const {data,error}=await sb.rpc('settle_online_orders',{p_order_ids:sel.map(o=>o.id)});if(error)throw error;closeModal();toast(`تمت تسوية ${data} أوردر`);await renderPage('online',{silent:true});}
+    catch(err){toast(errText(err),true);btn.disabled=false;}
+  };
+}
+/* ---- الطباعة والتصدير ---- */
+async function printOnlineOrder(orderId){
+  const [oRes,iRes]=await Promise.all([sb.from('online_orders').select('*').eq('id',orderId).single(),sb.from('online_order_items').select('*,book:books(title,author_name,isbn)').eq('order_id',orderId).order('id')]);
+  if(oRes.error)throw oRes.error;if(iRes.error)throw iRes.error;
+  const o=oRes.data,items=iRes.data||[];
+  const [cRes,wRes]=await Promise.all([o.company_id?sb.from('shipping_companies').select('name,phone').eq('id',o.company_id).single():Promise.resolve({data:null}),o.warehouse_id?sb.from('warehouses').select('name').eq('id',o.warehouse_id).single():Promise.resolve({data:null})]);
+  const logo=new URL('logo.jpg',location.href).href;const copies=items.reduce((n,i)=>n+Number(i.qty),0);
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>أوردر ${esc(o.order_no)}</title><style>@page{size:A4;margin:10mm}*{box-sizing:border-box}body{font:13px Tahoma,Arial,sans-serif;color:#111;margin:0}.head{display:flex;align-items:center;gap:14px;border-bottom:2px solid #ef5b3d;padding-bottom:10px;margin-bottom:12px}.head img{width:56px;height:56px;object-fit:cover;border-radius:10px}.head h1{margin:0;font-size:20px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 20px;margin-bottom:12px;font-size:12.5px}.box{border:1px solid #444;border-radius:8px;padding:8px 10px}table.items{width:100%;border-collapse:collapse}table.items th,table.items td{border:1px solid #444;padding:5px 6px;text-align:right;font-size:11.5px}table.items th{background:#f1f1f1}td.c,th.c{text-align:center}small{display:block;color:#555;font-size:10px}.tot{margin-top:12px;display:flex;gap:10px;justify-content:space-between;align-items:stretch}.tot table{border-collapse:collapse;min-width:260px}.tot td{border:1px solid #444;padding:6px 10px;font-size:13px}.cod{flex:1;border:2px solid #111;border-radius:10px;text-align:center;padding:10px;display:flex;flex-direction:column;justify-content:center}.cod b{font-size:24px}.sign{display:flex;justify-content:space-between;margin-top:30px}.sign div{width:30%;border-top:1px solid #111;padding-top:6px;text-align:center}</style></head><body><div class="head"><img src="${logo}"><div><h1>أوردر أونلاين ${esc(o.order_no)}</h1><div>دار حواديت · حواديت متع عقلك</div></div></div><div class="grid"><div class="box"><b>العميل:</b> ${esc(o.customer_name)}<br><b>الهاتف:</b> ${esc(o.customer_phone)}<br><b>المحافظة:</b> ${esc(o.governorate||'—')}<br><b>العنوان:</b> ${esc(o.address||'—')}</div><div class="box"><b>التاريخ:</b> ${esc(dateOnly(o.created_at))}<br><b>شركة الشحن:</b> ${esc(cRes.data?.name||'—')}${cRes.data?.phone?` (${esc(cRes.data.phone)})`:''}<br><b>رقم الشحنة:</b> ${esc(o.tracking_no||'—')}<br><b>المصدر:</b> ${esc(o.source||'—')} · <b>المخزن:</b> ${esc(wRes.data?.name||'—')}</div></div><table class="items"><thead><tr><th class="c">م</th><th>عنوان الكتاب</th><th class="c">الكمية</th><th class="c">السعر</th><th class="c">الإجمالي</th></tr></thead><tbody>${items.map((i,n)=>`<tr><td class="c">${n+1}</td><td><b>${esc(i.book?.title||'')}</b><small>${esc(i.book?.author_name||'')}</small></td><td class="c">${i.qty}</td><td class="c">${money(i.unit_price)}</td><td class="c">${money(i.line_total)}</td></tr>`).join('')}</tbody></table><div class="tot"><table><tr><td>إجمالي الكتب (${copies} نسخة)</td><td>${money(o.items_total)}</td></tr>${Number(o.discount)>0?`<tr><td>الخصم</td><td>${money(o.discount)}</td></tr>`:''}<tr><td>مصاريف الشحن</td><td>${money(o.shipping_fee)}</td></tr><tr><td><b>الإجمالي</b></td><td><b>${money(o.total)}</b></td></tr></table><div class="cod">${o.payment_type==='cod'?`<div>المطلوب تحصيله من العميل</div><b>${money(o.cod_amount)}</b>`:'<div>مدفوع مقدمًا</div><b>لا يُحصَّل شيء</b>'}</div></div>${o.notes?`<div class="box" style="margin-top:10px"><b>ملاحظات:</b> ${esc(o.notes)}</div>`:''}<div class="sign"><div>أمين المخزن</div><div>مندوب الشحن</div></div></body></html>`;
+  printHtmlDoc(html);
+}
+async function exportOnlineOrders(){
+  const list=(onlineCache.shown||onlineCache.orders).slice(0,300);
+  if(!list.length){toast('لا توجد أوردرات للتصدير',true);return;}
+  const ids=list.map(o=>o.id);const items=[];
+  for(let i=0;i<ids.length;i+=50){const part=await fetchAllRows(()=>sb.from('online_order_items').select('order_id,qty,book:books(title)').in('order_id',ids.slice(i,i+50)).order('id'));items.push(...part);}
+  const by=new Map();items.forEach(x=>{const a=by.get(x.order_id)||[];a.push(`${x.book?.title||''} × ${x.qty}`);by.set(x.order_id,a);});
+  exportXlsx('أوردرات-الشحن.xlsx',list.map(o=>({'رقم الأوردر':o.order_no,'اسم العميل':o.customer_name,'الهاتف':o.customer_phone,'المحافظة':o.governorate||'','العنوان':o.address||'','المبلغ المطلوب تحصيله':Number(o.cod_amount),'محتويات الشحنة':(by.get(o.id)||[]).join(' + '),'رقم الشحنة':o.tracking_no||'','الحالة':(ORD_STATUS[o.status]||[o.status])[0],'ملاحظات':o.notes||''})));
+}
 async function deleteExhibition(exId){
   const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
   const inv=await fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',exId).gt('qty',0).order('book_id'));
@@ -1039,6 +1233,16 @@ async function handlePageClick(e){
    case 'pack-exhibition':await openPackModal(id);break;
    case 'count-sheet':openCountSheetModal();break;
    case 'manga-count-sheet':await printMangaCountSheet();break;
+   case 'online-tab':onlineTab=id;await renderPage('online',{silent:true});break;
+   case 'online-new':await orderModal();break;
+   case 'online-print':await printOnlineOrder(id);break;
+   case 'online-status':orderStatusModal(id);break;
+   case 'online-edit':orderEditModal(id);break;
+   case 'online-export':await exportOnlineOrders();break;
+   case 'online-settle':settleModal(id);break;
+   case 'company-new':companyModal();break;
+   case 'company-edit':companyModal(onlineCache.companies.find(x=>x.id===id));break;
+   case 'company-delete':await deleteShipCompany(id);break;
    case 'manga-tab':mangaTab=id;await renderPage('manga',{silent:true});break;
    case 'manga-new':mangaTitleModal();break;
    case 'manga-series':mangaSeriesModal();break;
@@ -1082,6 +1286,7 @@ async function handlePageSubmit(e){
    case'settleMultiForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const ids=String(fd.get('item_ids')).split(',').filter(Boolean);for(const iid of ids){const {error}=await sb.rpc('settle_consignment_item',{p_item_id:Number(iid),p_sold_qty:Number(fd.get('sold_'+iid)||0),p_returned_qty:Number(fd.get('ret_'+iid)||0)});if(error)throw error;}closeModal();await renderPage('consignment');toast('تم حفظ التسوية');}break;
    case'mangaTitleForm':e.preventDefault();setBusy(form,true);await saveMangaTitle(form);break;
    case'mangaSeriesForm':e.preventDefault();setBusy(form,true);await saveMangaSeries(form);break;
+   case'shipCompanyForm':e.preventDefault();setBusy(form,true);await saveShipCompany(form);break;
    case'mangaSettingsForm':e.preventDefault();setBusy(form,true);await saveMangaSettings(form);break;
    case'mangaImportForm':e.preventDefault();setBusy(form,true);$('mangaImportMessage').textContent='جارٍ الاستيراد…';await importMangaExcel(form);break;
    case'transferForm':e.preventDefault();setBusy(form,true);{const fd=new FormData(form);const {error}=await sb.rpc('transfer_inventory',{p_book_id:fd.get('book_id'),p_from_warehouse_id:fd.get('from_id'),p_to_warehouse_id:fd.get('to_id'),p_qty:Number(fd.get('qty')),p_notes:fd.get('notes')||null});if(error)throw error;closeModal();await renderPage('warehouses');toast('تم التحويل وتسجيل حركة المخزون');}break;
@@ -1128,5 +1333,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r11';
+const APP_BUILD='2026-10-16-r12';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
