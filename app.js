@@ -1037,13 +1037,41 @@ async function openExhibitionReturnModal(exId){
     }catch(err){toast(errText(err),true);const b=$('retConfirm');if(b)b.disabled=false;}
   };
 }
+async function importPackSheet(file){
+  if(!window.XLSX)throw new Error('مكتبة Excel لم تُحمّل. حدّث الصفحة وحاول مرة أخرى.');
+  const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+  if(!rows.length)throw new Error('الملف لا يحتوي على صفوف.');
+  const norm=t=>String(t||'').toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+  const code=v=>normDigits(v).replace(/[^0-9Xx]/g,'').toUpperCase();
+  const byCode=new Map(),byTitle=new Map();
+  pack.books.forEach(b=>{[b.isbn,b.barcode].forEach(c=>{const d=code(c);if(d)byCode.set(d,b);});const k=norm(b.title);if(!byTitle.has(k))byTitle.set(k,[]);byTitle.get(k).push(b);});
+  const found=new Map(),problems=[];
+  rows.forEach((r,idx)=>{
+    const g=a=>pickValue(r,a);const line=idx+2;
+    const isbn=g(['ISBN','isbn','الباركود','باركود','Barcode','barcode','رقم الكتاب']),title=g(['العنوان','اسم الكتاب','الكتاب','title']);
+    if(isbn===''&&title==='')return;
+    const qty=Math.trunc(numValue(g(['الكمية','العدد','عدد النسخ','qty','quantity']),0));
+    const label=title!==''?String(title):String(isbn);
+    if(qty<=0){problems.push(`صف ${line} (${label}): الكمية فارغة أو صفر`);return;}
+    let b=isbn!==''?byCode.get(code(isbn)):null;
+    if(!b&&title!==''){const l=byTitle.get(norm(title))||[];if(l.length===1)b=l[0];else if(l.length>1){problems.push(`صف ${line} (${label}): أكتر من كتاب بنفس العنوان، استخدم ISBN`);return;}}
+    if(!b){problems.push(`صف ${line} (${label}): الكتاب غير موجود`);return;}
+    const cur=found.get(b.id);found.set(b.id,{book:b,qty:(cur?cur.qty:0)+qty});
+  });
+  found.forEach(v=>pack.lines.set(v.book.id,{book:v.book,qty:v.qty}));
+  drawPackResults();drawPackLines();
+  const over=[...found.values()].filter(v=>v.qty>(pack.stock.get(v.book.id)||0));
+  const copies=[...found.values()].reduce((n,v)=>n+v.qty,0);
+  $('packImportMsg').innerHTML=`<div class="message ${problems.length||over.length?'is-error':'is-success'}" style="margin:8px 0">تمت إضافة ${found.size} عنوان (${copies} نسخة) من الكشف${over.length?` · ${over.length} عنوان كميته أكبر من الرصيد (بالأحمر في الجدول)`:''}${problems.length?` · ${problems.length} صف لم يُضف`:''}.</div>${problems.length?`<div class="error-list">${problems.slice(0,25).map(p=>`<div>${esc(p)}</div>`).join('')}${problems.length>25?`<div>… و${problems.length-25} آخرين</div>`:''}</div>`:''}`;
+}
 async function openPackModal(exId){
   const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
   const sources=warehouses.filter(w=>w.id!==exId);
   if(!sources.length){toast('لا يوجد مخزن مصدر نشط',true);return;}
   const from=(activeWarehouse&&activeWarehouse.id!==exId?activeWarehouse:sources[0]).id;
   pack={ex,fromId:from,books:[],stock:new Map(),lines:new Map()};
-  openModal('تعبئة معرض: '+ex.name,`<div id="packRoot"><div class="form-grid"><label>من مخزن<select id="packFrom">${sources.map(w=>`<option value="${w.id}" ${w.id===from?'selected':''}>${esc(w.name)}</option>`).join('')}</select></label><label class="full">ابحث عن كتاب (العنوان / المؤلف / ISBN)<input id="packSearch" autocomplete="off" placeholder="اكتب للبحث ثم اضغط إضافة"></label></div><div id="packResults" style="margin:8px 0"></div><div class="panel-head"><h3>كشف التعبئة (<span id="packCount">0</span> عنوان / <span id="packCopies">0</span> نسخة)</h3></div><div id="packLines"></div><div class="form-actions" style="margin-top:12px"><button type="button" class="btn btn-primary" id="packConfirm">تأكيد التعبئة (تحويل المخزون) وطباعة الكشف</button><button type="button" class="btn" id="packPrintOnly">طباعة الكشف فقط (بدون تحويل)</button></div><p class="small muted">«تأكيد التعبئة» ينقل الكميات فعليًا من المخزن المصدر إلى مخزن المعرض. «طباعة الكشف فقط» لا يغيّر أي رصيد.</p></div>`);
+  openModal('تعبئة معرض: '+ex.name,`<div id="packRoot"><div class="form-grid"><label>من مخزن<select id="packFrom">${sources.map(w=>`<option value="${w.id}" ${w.id===from?'selected':''}>${esc(w.name)}</option>`).join('')}</select></label><label class="full">ابحث عن كتاب (العنوان / المؤلف / ISBN)<input id="packSearch" autocomplete="off" placeholder="اكتب للبحث ثم اضغط إضافة"></label></div><div class="toolbar" style="margin:10px 0 0"><button type="button" class="btn" id="packImportBtn">استيراد كشف من Excel</button><button type="button" class="btn" id="packTemplateBtn">تحميل نموذج الكشف</button><input type="file" id="packFile" accept=".xlsx,.xls,.csv" style="display:none"></div><div id="packImportMsg"></div><div id="packResults" style="margin:8px 0"></div><div class="panel-head"><h3>كشف التعبئة (<span id="packCount">0</span> عنوان / <span id="packCopies">0</span> نسخة)</h3></div><div id="packLines"></div><div class="form-actions" style="margin-top:12px"><button type="button" class="btn btn-primary" id="packConfirm">تأكيد التعبئة (تحويل المخزون) وطباعة الكشف</button><button type="button" class="btn" id="packPrintOnly">طباعة الكشف فقط (بدون تحويل)</button></div><p class="small muted">«تأكيد التعبئة» ينقل الكميات فعليًا من المخزن المصدر إلى مخزن المعرض. «طباعة الكشف فقط» لا يغيّر أي رصيد.</p></div>`);
   const root=$('packRoot');
   root.addEventListener('click',e=>{
     const a=e.target.closest('[data-pack-add]');
@@ -1053,6 +1081,9 @@ async function openPackModal(exId){
   });
   root.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.packQty){const l=pack.lines.get(t.dataset.packQty);if(l){l.qty=Math.max(1,parseInt(t.value,10)||1);drawPackLines();}}});
   $('packSearch').oninput=drawPackResults;
+  $('packImportBtn').onclick=()=>$('packFile').click();
+  $('packTemplateBtn').onclick=()=>exportXlsx('نموذج-كشف-تعبئة-معرض.xlsx',[{'ISBN':'9781234567890','العنوان':'اسم الكتاب (اختياري لو كتبت ISBN)','الكمية':10}]);
+  $('packFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{await importPackSheet(f);}catch(err){toast(errText(err),true);}};
   $('packFrom').onchange=async e=>{try{pack.fromId=e.target.value;await loadPackSource();}catch(err){toast(errText(err),true);}};
   $('packPrintOnly').onclick=()=>{const arr=[...pack.lines.values()];if(!arr.length){toast('أضف كتبًا أولًا',true);return;}printPackingList(pack.ex,arr.map(packLine),'مسودة قبل التحويل');};
   $('packConfirm').onclick=async()=>{try{await confirmPack();}catch(err){toast(errText(err),true);const b=$('packConfirm');if(b)b.disabled=false;}};
@@ -1385,5 +1416,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r13';
+const APP_BUILD='2026-10-16-r14';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
