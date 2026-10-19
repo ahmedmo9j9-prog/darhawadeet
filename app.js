@@ -44,7 +44,7 @@ function dateOnly(v) { try { return new Date(v).toLocaleDateString('ar-EG'); } c
 function toast(msg, err=false) { const t=$('toast'); t.textContent=msg; t.classList.toggle('toast-error',!!err); t.classList.remove('hidden'); t.style.display='block'; clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.style.display='none';},3500); }
 function showAuthMessage(id,msg,error=false){ const el=$(id); if(!el)return; el.textContent=msg||''; el.classList.toggle('is-error',!!error); el.classList.toggle('is-success',!error&&!!msg); }
 function errText(e){ return e?.message || String(e || 'حدث خطأ غير معروف'); }
-function cfg(){ return {url:localStorage.getItem(CONFIG_URL)||'',key:localStorage.getItem(CONFIG_KEY)||''}; }
+function cfg(){ const d=window.HAWADIT_CONFIG||{}; return {url:(localStorage.getItem(CONFIG_URL)||d.url||'').trim(),key:(localStorage.getItem(CONFIG_KEY)||d.key||'').trim()}; }
 function setBusy(form,busy){ if(!form)return; form.querySelectorAll('button[type="submit"]').forEach(b=>{b.disabled=busy;b.dataset.label ||= b.textContent;b.textContent=busy?'جارٍ التنفيذ…':b.dataset.label;}); }
 function openModal(title,html){ $('modalTitle').textContent=title; $('modalBody').innerHTML=html; $('modal').classList.remove('hidden'); }
 function closeModal(){ $('modal').classList.add('hidden'); $('modalBody').innerHTML=''; }
@@ -1416,5 +1416,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r14';
+const APP_BUILD='2026-10-16-r15';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
