@@ -14,6 +14,7 @@ const NAV = [
   {id:'exhibitions', title:'المعارض وكشف التعبئة', icon:'🎪', roles:['manager','warehouse']},
   {id:'manga', title:'المانجا', icon:'📖', roles:['manager','cashier','warehouse','accountant']},
   {id:'online', title:'الأوردرات الأونلاين', icon:'🛒', roles:['manager','cashier','warehouse','accountant']},
+  {id:'authority', title:'تسليمات الهيئة', icon:'🏛', roles:['manager','warehouse','accountant']},
   {id:'authors', title:'المؤلفون', icon:'✎', roles:['manager','accountant']},
   {id:'consignment', title:'الأمانة والمكتبات', icon:'⇆', roles:['manager','accountant','warehouse']},
   {id:'printing', title:'الطباعة والطبعات', icon:'▧', roles:['manager','accountant','warehouse']},
@@ -205,6 +206,7 @@ const ICONS={
   expenses:'<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14.5" r="1"/>',
   custody:'<path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/>',
   users:'<circle cx="9" cy="8" r="3.5"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a7 7 0 0 1 4 6.5"/>',
+  authority:'<path d="M3 21h18M5 21V10M9.5 21V10M14.5 21V10M19 21V10"/><path d="M2 10 12 3l10 7z"/>',
   reports:'<path d="M3 3v18h18"/><path d="M8 17v-6M13 17V7M18 17v-9"/>',
   print:'<path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
   box:'<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
@@ -259,6 +261,7 @@ async function renderPage(page,opts={}){
       case'exhibitions':await renderExhibitions();break;
       case'manga':await renderManga();break;
       case'online':await renderOnline();break;
+      case'authority':await renderAuthority();break;
       case'authors':await renderAuthors();break;
       case'consignment':await renderConsignment();break;
       case'printing':await renderPrinting();break;
@@ -929,6 +932,65 @@ async function exportOnlineOrders(){
   const by=new Map();items.forEach(x=>{const a=by.get(x.order_id)||[];a.push(`${x.book?.title||''} × ${x.qty}`);by.set(x.order_id,a);});
   exportXlsx('أوردرات-الشحن.xlsx',list.map(o=>({'رقم الأوردر':o.order_no,'اسم العميل':o.customer_name,'الهاتف':o.customer_phone,'المحافظة':o.governorate||'','العنوان':o.address||'','المبلغ المطلوب تحصيله':Number(o.cod_amount),'محتويات الشحنة':(by.get(o.id)||[]).join(' + '),'رقم الشحنة':o.tracking_no||'','الحالة':(ORD_STATUS[o.status]||[o.status])[0],'ملاحظات':o.notes||''})));
 }
+/* ====== تسليمات الهيئة ====== */
+let authData={books:[],map:new Map(),shown:[],sel:new Set()};
+const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const authRow=b=>authData.map.get(b.id)||{book_id:b.id,required_qty:5,delivered:false,delivered_at:null,notes:null};
+async function renderAuthority(){
+  let books,rows;
+  try{
+    [books,rows]=await Promise.all([fetchAllRows(()=>sb.from('books').select('id,title,author_name,isbn,barcode').eq('active',true).order('title').order('id')),fetchAllRows(()=>sb.from('authority_deliveries').select('*').order('book_id'))]);
+  }catch(e){
+    if(String(e?.message||'').includes('authority_deliveries')||e?.code==='42P01')throw new Error('جدول تسليمات الهيئة غير موجود. شغّل ملف authority_deliveries.sql في Supabase أولًا.');
+    throw e;
+  }
+  authData={books,map:new Map(rows.map(r=>[r.book_id,r])),shown:[],sel:new Set()};
+  $('pageRoot').innerHTML=`<div class="stats-grid" id="authKpi"></div><div class="page-tools"><div><h3>تسليمات الهيئة</h3><p>العدد المطلوب من كل كتاب (الافتراضي 5 نسخ) وحالة التسليم نعم / لا</p></div><div class="tool-actions"><button class="btn btn-primary" data-action="auth-mark" data-id="yes">تعليم المحدد: تم التسليم</button><button class="btn" data-action="auth-mark" data-id="no">تعليم المحدد: لم يتم</button><button class="btn" data-action="auth-print">🖨 طباعة الكشف</button><button class="btn" data-action="auth-export">تصدير Excel</button></div></div><div class="toolbar"><input id="authSearch" placeholder="ابحث بالعنوان أو المؤلف أو ISBN"><select id="authFilter"><option value="">كل الكتب</option><option value="no">لم يتم التسليم</option><option value="yes">تم التسليم</option></select></div><section class="panel"><div class="table-scroll" id="authTable"></div><p class="small muted" id="authNote" style="margin:10px 0 0"></p></section>`;
+  $('authSearch').oninput=authDraw;$('authFilter').onchange=authDraw;
+  $('authTable').addEventListener('change',async e=>{
+    const t=e.target;if(!t.dataset&&!t.id)return;
+    if(t.id==='authAll'){authData.shown.forEach(b=>t.checked?authData.sel.add(b.id):authData.sel.delete(b.id));document.querySelectorAll('#authTable .auth-check').forEach(c=>c.checked=t.checked);return;}
+    if(t.classList.contains('auth-check')){t.checked?authData.sel.add(t.dataset.id):authData.sel.delete(t.dataset.id);return;}
+    try{
+      if(t.dataset.authSel)await authSave([t.dataset.authSel],{delivered:t.value==='yes'});
+      else if(t.dataset.authQty)await authSave([t.dataset.authQty],{required_qty:Math.max(1,Math.trunc(numValue(t.value,5)))});
+    }catch(err){toast(errText(err),true);authDraw();}
+  });
+  authDraw();
+}
+function authDraw(){
+  const q=($('authSearch').value||'').trim().toLowerCase(),f=$('authFilter').value;
+  const list=authData.books.filter(b=>{const r=authRow(b);return(!f||(f==='yes')===r.delivered)&&(!q||[b.title,b.author_name,b.isbn,b.barcode].some(v=>String(v||'').toLowerCase().includes(q)));});
+  authData.shown=list;const vis=new Set(list.map(b=>b.id));authData.sel=new Set([...authData.sel].filter(id=>vis.has(id)));
+  const all=authData.books.map(authRow);const done=all.filter(r=>r.delivered);
+  $('authKpi').innerHTML=`${cardKpi('عدد العناوين',all.length)}${cardKpi('تم التسليم',done.length)}${cardKpi('لم يتم التسليم',all.length-done.length)}${cardKpi('النسخ المسلّمة',done.reduce((n,r)=>n+Number(r.required_qty),0),'من '+all.reduce((n,r)=>n+Number(r.required_qty),0)+' مطلوبة')}`;
+  const CAP=400;
+  $('authTable').innerHTML=table(['<input type="checkbox" id="authAll" title="تحديد الكل">','م','العنوان','المؤلف','ISBN','العدد المطلوب','تم التسليم','تاريخ التسليم'],list.slice(0,CAP).map((b,i)=>{const r=authRow(b);return `<tr><td><input type="checkbox" class="auth-check" data-id="${b.id}" ${authData.sel.has(b.id)?'checked':''}></td><td>${i+1}</td><td><b>${esc(b.title)}</b></td><td>${esc(b.author_name||'—')}</td><td>${esc(b.isbn||b.barcode||'—')}</td><td><input type="text" inputmode="decimal" data-num data-auth-qty="${b.id}" value="${r.required_qty}" style="width:64px;padding:6px;border:1px solid var(--line);border-radius:8px;text-align:center"></td><td><select class="auth-sel ${r.delivered?'yes':'no'}" data-auth-sel="${b.id}"><option value="no" ${r.delivered?'':'selected'}>لا</option><option value="yes" ${r.delivered?'selected':''}>نعم</option></select></td><td>${esc(r.delivered_at||'—')}</td></tr>`;}).join(''),'لا توجد كتب مطابقة');
+  $('authNote').textContent=list.length>CAP?`معروض أول ${CAP} من ${list.length} كتاب. استخدم البحث أو الفلتر للوصول لباقي الكتب (الطباعة والتصدير بيشملوا الكل).`:'';
+}
+async function authSave(ids,patch){
+  const now=new Date().toISOString();
+  const rows=ids.map(id=>{const b=authData.books.find(x=>x.id===id);const base=authRow(b||{id});
+    return {book_id:id,required_qty:patch.required_qty??base.required_qty,delivered:patch.delivered??base.delivered,delivered_at:patch.delivered===undefined?base.delivered_at:(patch.delivered?todayISO():null),notes:base.notes??null,updated_at:now};});
+  for(let i=0;i<rows.length;i+=500){const {error}=await sb.from('authority_deliveries').upsert(rows.slice(i,i+500),{onConflict:'book_id'});if(error)throw error;}
+  rows.forEach(r=>authData.map.set(r.book_id,{...(authData.map.get(r.book_id)||{}),...r}));
+  authDraw();
+}
+async function authBulk(yes){
+  const ids=[...authData.sel];if(!ids.length){toast('حدد كتابًا واحدًا على الأقل',true);return;}
+  await authSave(ids,{delivered:yes});toast(`تم تعليم ${ids.length} كتاب: ${yes?'تم التسليم':'لم يتم التسليم'}`);
+}
+function authFilterLabel(){const f=$('authFilter')?.value;return f==='yes'?'الكتب المسلَّمة':f==='no'?'الكتب غير المسلَّمة':'كل الكتب';}
+function printAuthority(){
+  const list=authData.shown;if(!list.length){toast('لا توجد كتب للطباعة',true);return;}
+  const logo=new URL('logo.jpg',location.href).href;const rows=list.map(authRow);const done=rows.filter(r=>r.delivered).length;
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف تسليمات الهيئة</title><style>${COUNT_CSS}.box{display:inline-block;width:13px;height:13px;border:1.5px solid #111;vertical-align:middle;margin-left:5px;text-align:center;line-height:11px;font-size:11px}</style></head><body><div class="head"><img src="${logo}"><div><h1>كشف تسليمات الهيئة</h1><div class="sub">دار حواديت · ${esc(authFilterLabel())}</div></div></div><div class="meta"><div>التاريخ: ${esc(new Date().toLocaleDateString('ar-EG'))}</div><div>عدد العناوين: <b>${list.length}</b></div><div>تم التسليم: <b>${done}</b> · لم يتم: <b>${list.length-done}</b></div></div><table><thead><tr><th class="c" style="width:28px">م</th><th>عنوان الكتاب</th><th style="width:18%">المؤلف</th><th style="width:14%">ISBN</th><th class="c" style="width:55px">العدد</th><th class="c" style="width:85px">تم التسليم</th><th class="c" style="width:80px">تاريخ التسليم</th><th style="width:12%">ملاحظات</th></tr></thead><tbody>${list.map((b,i)=>{const r=rows[i];return `<tr><td class="c">${i+1}</td><td><b>${esc(b.title)}</b></td><td>${esc(b.author_name||'')}</td><td>${esc(b.isbn||b.barcode||'')}</td><td class="c">${r.required_qty}</td><td class="c"><span class="box">${r.delivered?'✓':''}</span>${r.delivered?'نعم':'لا'}</td><td class="c">${esc(r.delivered_at||'')}</td><td></td></tr>`;}).join('')}</tbody></table><div class="sum">إجمالي النسخ المطلوبة: ${rows.reduce((n,r)=>n+Number(r.required_qty),0)} · المسلّمة: ${rows.filter(r=>r.delivered).reduce((n,r)=>n+Number(r.required_qty),0)}</div><div class="sign"><div>أمين المخزن</div><div>المستلم من الهيئة</div><div>المراجع</div></div></body></html>`;
+  printHtmlDoc(html);toast('في نافذة الطباعة اختر «حفظ كـ PDF» من قائمة الطابعة');
+}
+function exportAuthority(){
+  const list=authData.shown;if(!list.length){toast('لا توجد كتب للتصدير',true);return;}
+  exportXlsx('تسليمات-الهيئة.xlsx',list.map(b=>{const r=authRow(b);return {'العنوان':b.title,'المؤلف':b.author_name||'','ISBN':b.isbn||b.barcode||'','العدد المطلوب':r.required_qty,'تم التسليم':r.delivered?'نعم':'لا','تاريخ التسليم':r.delivered_at||''};}));
+}
 async function deleteExhibition(exId){
   const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
   const inv=await fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',exId).gt('qty',0).order('book_id'));
@@ -1326,6 +1388,9 @@ async function handlePageClick(e){
    case 'company-new':companyModal();break;
    case 'company-edit':companyModal(onlineCache.companies.find(x=>x.id===id));break;
    case 'company-delete':await deleteShipCompany(id);break;
+   case 'auth-mark':await authBulk(id==='yes');break;
+   case 'auth-print':printAuthority();break;
+   case 'auth-export':exportAuthority();break;
    case 'manga-tab':mangaTab=id;await renderPage('manga',{silent:true});break;
    case 'manga-new':mangaTitleModal();break;
    case 'manga-series':mangaSeriesModal();break;
@@ -1416,5 +1481,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r15';
+const APP_BUILD='2026-10-16-r16';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
