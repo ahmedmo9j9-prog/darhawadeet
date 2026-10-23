@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تقرير مبيعات الوردية</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--o:#EF5B3D;--ink:#26231F;--g:#6B6B6B;--bg:#F4F4F2;--ln:#DDDAD5}
+*{box-sizing:border-box}
+body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:var(--bg);color:var(--ink)}
+main{max-width:980px;margin:auto;padding:20px}
+h1{font-size:24px;margin:0 0 16px}
+.card{background:#fff;border-radius:12px;padding:18px;margin-bottom:16px;overflow-x:auto}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--g)}
+input,button{font:inherit}
+input{height:42px;padding:0 10px;border:1px solid var(--ln);border-radius:8px;color:var(--ink)}
+.btn{height:42px;padding:0 18px;border-radius:8px;border:2px solid var(--ink);background:#fff;color:var(--ink);font-weight:700;cursor:pointer}
+.btn.p{background:var(--o);border-color:var(--o);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+th{text-align:right;color:var(--g);padding:8px 6px;border-bottom:2px solid var(--ink)}
+td{padding:8px 6px;border-bottom:1px solid #EEECE8}
+tfoot td{font-weight:700;font-size:17px;border-top:2px solid var(--ink);border-bottom:0}
+.msg{color:#B3341A;margin:8px 0}
+a{color:var(--o)}
+:focus-visible{outline:3px solid var(--o);outline-offset:2px}
+@media print{.no{display:none!important}body{background:#fff}.card{padding:0}}
+</style>
+</head>
+<body>
+<main>
+<h1>تقرير مبيعات الوردية</h1>
+<div class="card no">
+<div class="row">
+<label>من<input type="datetime-local" id="f"></label>
+<label>إلى<input type="datetime-local" id="t"></label>
+<label>مكان البيع (اختياري)<input id="pl" placeholder="مثلاً: أونلاين"></label>
+<button class="btn p" id="go">عرض التقرير</button>
+<button class="btn" id="d1">اليوم</button>
+<button class="btn" id="d8">آخر ٨ ساعات</button>
+</div>
+<div class="msg" id="m"></div>
+</div>
+<div class="card" id="out"><p>اختار الفترة واضغط «عرض التقرير».</p></div>
+<div class="row no"><button class="btn" id="pr">طباعة</button><button class="btn" id="xl">تصدير Excel</button><a href="./">الرجوع للنظام</a></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* نفس الرابط والمفتاح اللي في ملف index.html بتاع النظام */
+const SB_URL='https://txaqhciiexgfklniehxu.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR4YXFoY2lpZXhnZmtsbmllaHh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzcwMTYsImV4cCI6MjEwNjk1MzAxNn0.x1uY75ziUX38JiUS9jP7zEIeVBuMv6xR1ahWjfb_KGA';
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:2});
+const loc=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+const OK=/^https:\/\/[a-z0-9-]+\.supabase\.co/.test(SB_URL)&&SB_KEY.length>40&&!/[\u0600-\u06FF]/.test(SB_KEY);
+const sb=OK?supabase.createClient(SB_URL,SB_KEY):null;
+let rows=[];
+
+function range(from){const n=new Date();$('#t').value=loc(n);$('#f').value=loc(from(n))}
+$('#d1').onclick=()=>{range(n=>new Date(n.getFullYear(),n.getMonth(),n.getDate()));run()};
+$('#d8').onclick=()=>{range(n=>new Date(n.getTime()-8*36e5));run()};
+$('#go').onclick=run;
+$('#pr').onclick=()=>window.print();
+$('#xl').onclick=()=>{
+  if(!rows.length)return;
+  const a=[['التاريخ','اسم الكتاب','الكمية','السعر المباع','الإجمالي'],...rows.map(r=>[r.when,r.title,r.qty,r.sold,r.line]),['','الإجمالي',rows.reduce((s,r)=>s+r.qty,0),'',rows.reduce((s,r)=>s+r.line,0)]];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a),'الوردية');XLSX.writeFile(wb,'تقرير-الوردية.xlsx');
+};
+
+async function run(){
+  if(!OK){$('#m').textContent='لازم تحط رابط ومفتاح Supabase في أول ملف report.html.';return}
+  const{data:{session}}=await sb.auth.getSession();
+  if(!session){$('#m').innerHTML='سجّل دخول من <a href="./">صفحة النظام</a> الأول، وبعدين ارجع هنا.';return}
+  $('#m').textContent='';
+  const f=new Date($('#f').value),t=new Date($('#t').value);
+  if(isNaN(f)||isNaN(t))return $('#m').textContent='اختار تاريخ البداية والنهاية.';
+  let q=sb.from('sale_items').select('title,qty,price,sales!inner(created_at,place,discount)').gte('sales.created_at',f.toISOString()).lte('sales.created_at',t.toISOString()).limit(1000);
+  const p=$('#pl').value.trim();if(p)q=q.eq('sales.place',p);
+  const{data,error}=await q;
+  if(error){console.error(error);$('#m').textContent='تعذّر تحميل التقرير: '+error.message;return}
+  rows=data.map(x=>{const sold=+x.price*(1-(+x.sales.discount||0)/100);return{at:new Date(x.sales.created_at),when:new Date(x.sales.created_at).toLocaleString('ar-EG'),title:x.title,qty:+x.qty,sold,line:sold*x.qty}}).sort((a,b)=>a.at-b.at);
+  const tq=rows.reduce((s,r)=>s+r.qty,0),tt=rows.reduce((s,r)=>s+r.line,0);
+  $('#out').innerHTML=rows.length?`<table><thead><tr><th>التاريخ والوقت</th><th>اسم الكتاب</th><th>الكمية</th><th>السعر المباع</th><th>الإجمالي</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.when)}</td><td>${esc(r.title)}</td><td>${r.qty}</td><td>${money(r.sold)}</td><td>${money(r.line)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2">الإجمالي (${rows.length} صنف مباع)</td><td>${tq}</td><td></td><td>${money(tt)} ج.م</td></tr></tfoot></table>${data.length>=1000?'<p class="msg">ظهر أول ١٠٠٠ سطر بس. قصّر الفترة عشان يظهر كله.</p>':''}`:'<p>مفيش مبيعات في الفترة دي.</p>';
+}
+range(n=>new Date(n.getFullYear(),n.getMonth(),n.getDate()));
+</script>
+</body>
+</html>
