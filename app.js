@@ -991,6 +991,28 @@ function exportAuthority(){
   const list=authData.shown;if(!list.length){toast('لا توجد كتب للتصدير',true);return;}
   exportXlsx('تسليمات-الهيئة.xlsx',list.map(b=>{const r=authRow(b);return {'العنوان':b.title,'المؤلف':b.author_name||'','ISBN':b.isbn||b.barcode||'','العدد المطلوب':r.required_qty,'تم التسليم':r.delivered?'نعم':'لا','تاريخ التسليم':r.delivered_at||''};}));
 }
+/* ====== تقرير مبيعات الوردية ====== */
+async function printShiftSalesReport(shiftId){
+  const sh=(pageShifts||[]).find(s=>s.shift_id===shiftId);
+  const invs=await fetchAllRows(()=>sb.from('invoices').select('id,invoice_no,created_at,discount,total,payment_method,status').eq('shift_id',shiftId).neq('status','cancelled').order('created_at').order('id'));
+  const items=[];
+  for(let i=0;i<invs.length;i+=40){
+    const part=await fetchAllRows(()=>sb.from('invoice_items').select('id,invoice_id,qty,unit_price,line_total,book:books(title)').in('invoice_id',invs.slice(i,i+40).map(x=>x.id)).order('id'));
+    items.push(...part);
+  }
+  const rets=await fetchAllRows(()=>sb.from('invoice_returns').select('id,created_at,qty,refund_amount,refund_method,book:books(title)').eq('shift_id',shiftId).order('created_at').order('id'));
+  const invMap=new Map(invs.map(x=>[x.id,x]));
+  const rows=items.map(it=>({it,inv:invMap.get(it.invoice_id)})).filter(x=>x.inv).sort((a,b)=>String(a.inv.created_at).localeCompare(String(b.inv.created_at))||a.it.id-b.it.id);
+  if(!rows.length&&!rets.length){toast('لا توجد مبيعات في هذه الوردية',true);return;}
+  const n=v=>Number(v||0);
+  const gross=rows.reduce((s,x)=>s+n(x.it.line_total),0),copies=rows.reduce((s,x)=>s+n(x.it.qty),0);
+  const disc=invs.reduce((s,x)=>s+n(x.discount),0),net=gross-disc,refunds=rets.reduce((s,x)=>s+n(x.refund_amount),0);
+  const byPay=new Map();invs.forEach(x=>byPay.set(x.payment_method,(byPay.get(x.payment_method)||0)+n(x.total)));
+  const logo=new URL('logo.jpg',location.href).href;
+  const who=sh?(sh.username||sh.full_name||''):'';
+  const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>تقرير مبيعات الوردية</title><style>${COUNT_CSS}td{height:auto}table.tot{width:auto;min-width:300px;margin-top:12px;margin-left:auto;margin-right:0}table.tot td{border:1px solid #444;padding:6px 10px;font-size:12.5px}table.tot tr.net td{background:#eee;font-weight:800;font-size:14px}h2{font-size:14px;margin:16px 0 6px}</style></head><body><div class="head"><img src="${logo}"><div><h1>تقرير مبيعات الوردية</h1><div class="sub">دار حواديت · حواديت متع عقلك</div></div></div><div class="meta"><div>الكاشير: <b>${esc(who||'—')}</b></div><div>المخزن: ${esc(sh?.warehouse_name||'—')}</div><div>الحالة: ${sh?(sh.status==='open'?'مفتوحة':'مغلقة'):'—'}</div><div>بداية الوردية: ${esc(sh?dateTime(sh.opened_at):'—')}</div><div>نهاية الوردية: ${esc(sh?.closed_at?dateTime(sh.closed_at):'—')}</div><div>تاريخ الإصدار: ${esc(dateTime(new Date().toISOString()))}</div></div><table><thead><tr><th class="c" style="width:28px">م</th><th>اسم الكتاب</th><th class="c" style="width:120px">التاريخ والوقت</th><th class="c" style="width:80px">رقم الفاتورة</th><th class="c" style="width:45px">الكمية</th><th class="c" style="width:85px">السعر المباع</th><th class="c" style="width:90px">الإجمالي</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td class="c">${i+1}</td><td><b>${esc(x.it.book?.title||'')}</b></td><td class="c">${esc(dateTime(x.inv.created_at))}</td><td class="c">${esc(x.inv.invoice_no)}</td><td class="c">${x.it.qty}</td><td class="c">${money(x.it.unit_price)}</td><td class="c">${money(x.it.line_total)}</td></tr>`).join('')||'<tr><td colspan="7" class="c">لا توجد مبيعات</td></tr>'}</tbody></table><table class="tot"><tr><td>إجمالي القطع المباعة</td><td>${copies}</td></tr><tr><td>إجمالي المبيعات</td><td>${money(gross)}</td></tr>${disc>0?`<tr><td>خصومات الفواتير</td><td>${money(disc)}</td></tr>`:''}<tr class="net"><td>صافي المبيعات</td><td>${money(net)}</td></tr>${refunds>0?`<tr><td>المرتجعات</td><td>${money(refunds)}</td></tr><tr class="net"><td>الصافي بعد المرتجعات</td><td>${money(net-refunds)}</td></tr>`:''}</table>${byPay.size?`<h2>المبيعات حسب طريقة الدفع</h2><table style="width:auto;min-width:300px"><tbody>${[...byPay.entries()].map(([k,v])=>`<tr><td>${esc(k)}</td><td class="c">${money(v)}</td></tr>`).join('')}</tbody></table>`:''}${rets.length?`<h2>المرتجعات خلال الوردية</h2><table><thead><tr><th>اسم الكتاب</th><th class="c" style="width:120px">التاريخ والوقت</th><th class="c" style="width:45px">الكمية</th><th class="c" style="width:90px">المبلغ المردود</th><th class="c" style="width:70px">الطريقة</th></tr></thead><tbody>${rets.map(r=>`<tr><td><b>${esc(r.book?.title||'')}</b></td><td class="c">${esc(dateTime(r.created_at))}</td><td class="c">${r.qty}</td><td class="c">${money(r.refund_amount)}</td><td class="c">${esc(r.refund_method)}</td></tr>`).join('')}</tbody></table>`:''}<div class="sign"><div>الكاشير</div><div>المراجع</div><div>المدير</div></div></body></html>`;
+  printHtmlDoc(html);toast('في نافذة الطباعة اختر «حفظ كـ PDF» من قائمة الطابعة');
+}
 async function deleteExhibition(exId){
   const {data:ex,error}=await sb.from('warehouses').select('*').eq('id',exId).single();if(error)throw error;
   const inv=await fetchAllRows(()=>sb.from('inventory').select('book_id,qty').eq('warehouse_id',exId).gt('qty',0).order('book_id'));
@@ -1321,13 +1343,13 @@ async function renderShifts(){
  const otherWarehouse=own&&own.warehouse_id!==currentWarehouse?own.warehouse_name:null;
  let activePanel='';
  if(own){
-   activePanel=`<section class="panel spaced"><div class="panel-head"><div><h3>وردية مفتوحة</h3><p>${esc(own.warehouse_name)} · بدأت ${dateTime(own.opened_at)}</p></div>${canOperate?`<button class="btn btn-primary" data-action="close-shift" data-id="${own.shift_id}">إغلاق الوردية وجرد الخزنة</button>`:''}</div><div class="stats-grid">${cardKpi('رصيد بداية الخزنة',money(own.opening_cash))}${cardKpi('مبيعات نقدية',money(own.cash_sales))}${cardKpi('مرتجعات نقدية',money(own.cash_refunds))}${cardKpi('مصروفات نقدية مرتبطة',money(own.cash_expenses))}${cardKpi('المتوقع في الخزنة',money(own.expected_cash),'قبل إدخال العد الفعلي')}</div>${otherWarehouse?`<div class="notice notice-warning">الوردية المفتوحة تخص مخزن «${esc(otherWarehouse)}»، بينما المخزن النشط مختلف. لا يمكن فتح وردية ثانية حتى تُغلق الحالية.</div>`:''}</section>`;
+   activePanel=`<section class="panel spaced"><div class="panel-head"><div><h3>وردية مفتوحة</h3><p>${esc(own.warehouse_name)} · بدأت ${dateTime(own.opened_at)}</p></div><div class="tool-actions"><button class="btn" data-action="shift-report" data-id="${own.shift_id}">📄 تقرير المبيعات</button>${canOperate?`<button class="btn btn-primary" data-action="close-shift" data-id="${own.shift_id}">إغلاق الوردية وجرد الخزنة</button>`:''}</div></div><div class="stats-grid">${cardKpi('رصيد بداية الخزنة',money(own.opening_cash))}${cardKpi('مبيعات نقدية',money(own.cash_sales))}${cardKpi('مرتجعات نقدية',money(own.cash_refunds))}${cardKpi('مصروفات نقدية مرتبطة',money(own.cash_expenses))}${cardKpi('المتوقع في الخزنة',money(own.expected_cash),'قبل إدخال العد الفعلي')}</div>${otherWarehouse?`<div class="notice notice-warning">الوردية المفتوحة تخص مخزن «${esc(otherWarehouse)}»، بينما المخزن النشط مختلف. لا يمكن فتح وردية ثانية حتى تُغلق الحالية.</div>`:''}</section>`;
  } else if(canOperate){
    activePanel=`<section class="panel spaced"><div class="notice notice-info"><h3>لا توجد وردية مفتوحة</h3><p>اختَر المخزن النشط وتأكد من المبلغ الموجود فعليًا في الخزنة، ثم افتح الوردية قبل البيع.</p><button class="btn btn-primary" data-action="open-shift">فتح وردية جديدة</button></div></section>`;
  }else{
    activePanel=`<section class="panel spaced"><div class="notice notice-info">يمكنك الاطلاع على الورديات وتقاريرها. فتح وإغلاق الوردية متاحان للمدير والكاشير.</div></section>`;
  }
- const rows=pageShifts.map(s=>`<tr><td><b>${esc(s.username||s.full_name)}</b><br><small>${esc(s.warehouse_name)}</small></td><td>${dateTime(s.opened_at)}</td><td>${s.closed_at?dateTime(s.closed_at):'—'}</td><td>${money(s.opening_cash)}</td><td>${money(s.cash_sales)}</td><td>${money(s.cash_refunds)}</td><td>${money(s.expected_cash)}</td><td>${s.counted_cash==null?'—':money(s.counted_cash)}</td><td>${s.cash_difference==null?'—':`<b class="${Number(s.cash_difference)===0?'good':'bad'}">${money(s.cash_difference)}</b>`}</td><td><span class="badge ${s.status==='open'?'badge-warning':'badge-ok'}">${s.status==='open'?'مفتوحة':'مغلقة'}</span></td><td>${s.status==='open'&&(profile.role==='manager'||s.user_id===currentUser.id)&&canOperate?`<button class="btn btn-sm" data-action="close-shift" data-id="${s.shift_id}">إغلاق</button>`:''}</td></tr>`).join('');
+ const rows=pageShifts.map(s=>`<tr><td><b>${esc(s.username||s.full_name)}</b><br><small>${esc(s.warehouse_name)}</small></td><td>${dateTime(s.opened_at)}</td><td>${s.closed_at?dateTime(s.closed_at):'—'}</td><td>${money(s.opening_cash)}</td><td>${money(s.cash_sales)}</td><td>${money(s.cash_refunds)}</td><td>${money(s.expected_cash)}</td><td>${s.counted_cash==null?'—':money(s.counted_cash)}</td><td>${s.cash_difference==null?'—':`<b class="${Number(s.cash_difference)===0?'good':'bad'}">${money(s.cash_difference)}</b>`}</td><td><span class="badge ${s.status==='open'?'badge-warning':'badge-ok'}">${s.status==='open'?'مفتوحة':'مغلقة'}</span></td><td><div class="tool-actions"><button class="btn btn-sm" data-action="shift-report" data-id="${s.shift_id}">📄 تقرير المبيعات</button>${s.status==='open'&&(profile.role==='manager'||s.user_id===currentUser.id)&&canOperate?`<button class="btn btn-sm" data-action="close-shift" data-id="${s.shift_id}">إغلاق</button>`:''}</div></td></tr>`).join('');
  $('pageRoot').innerHTML=`<div class="page-tools"><div><h3>الورديات وجرد الخزنة</h3><p>فتح وردية، متابعة النقدية، وتسجيل الرصيد الفعلي عند الإغلاق</p></div><div class="tool-actions">${canOperate&&!own?'<button class="btn btn-primary" data-action="open-shift">+ فتح وردية</button>':''}<button class="btn" data-action="refresh-shifts">تحديث</button></div></div>${activePanel}<section class="panel spaced"><div class="panel-head"><h3>سجل الورديات</h3><span class="muted">آخر 150 وردية وفق صلاحيات الحساب</span></div>${table(['المستخدم / المخزن','وقت الفتح','وقت الإغلاق','رصيد الافتتاح','مبيعات نقدية','مرتجعات نقدية','المتوقع','الفعلي','الفرق','الحالة','إجراء'],rows,'لا توجد ورديات بعد')}</section><div class="notice notice-info">المتوقع في الخزنة = رصيد الافتتاح + المبيعات النقدية − المرتجعات النقدية − المصروفات النقدية المسجلة على الوردية. الدفع بالفيزا والآجل لا يدخل في جرد النقدية.</div>`;
 }
 function openShiftModal(){
@@ -1391,6 +1413,7 @@ async function handlePageClick(e){
    case 'auth-mark':await authBulk(id==='yes');break;
    case 'auth-print':printAuthority();break;
    case 'auth-export':exportAuthority();break;
+   case 'shift-report':await printShiftSalesReport(id);break;
    case 'manga-tab':mangaTab=id;await renderPage('manga',{silent:true});break;
    case 'manga-new':mangaTitleModal();break;
    case 'manga-series':mangaSeriesModal();break;
@@ -1481,5 +1504,5 @@ start().catch(e=>{showAuthMessage('loginMessage',errText(e),true);});
 
 /* تحويل الأرقام العربية إلى إنجليزية أثناء الكتابة في خانات الأرقام */
 document.addEventListener('input',e=>{const t=e.target;if(t&&t.dataset&&'num' in t.dataset){const v=normDigits(t.value);if(v!==t.value){const pos=t.selectionStart;t.value=v;try{t.setSelectionRange(pos,pos);}catch{}}}},true);
-const APP_BUILD='2026-10-16-r16';
+const APP_BUILD='2026-10-16-r17';
 {const tp=document.querySelector('.topbar p');if(tp)tp.textContent+=' · إصدار '+APP_BUILD;}
